@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+
+import rclpy
+from pic4rl.tasks.goToPose.nav_camera import Pic4rlCamera
+
+def main(args=None):
+    rclpy.init(args=args)
+
+    pic4rl_camera = Pic4rlCamera()
+
+    # executor = MultiThreadedExecutor()
+    # executor.add_node(pic4rl_camera)
+
+    try:
+        # executor.spin()
+        pic4rl_camera.threadFunc()
+    except KeyboardInterrupt:
+        # executor.shutdown()
+        pic4rl_camera.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == "__main__":
+    main()
+
