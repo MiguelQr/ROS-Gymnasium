@@ -347,7 +347,7 @@ class Pic4rlCamera(Pic4rlEnvironmentCamera):
 
             self.actor_fp16.invoke()
             self.commands = self.actor_fp16.get_tensor(self.output_index)[0, :]
-
+            print(self.commands)
             self.step_counter += 1
 
     def log_check(self):
