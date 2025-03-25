@@ -4,7 +4,7 @@ import os
 import numpy as np
 import math
 import subprocess
-import jsonimport random
+import random
 import time
 import yaml
 import logging
@@ -31,40 +31,58 @@ class Pic4rlEnvironmentCamera(Node, gym.Env):
 
         # ROS parameters
         self.declare_parameter("package_name", "pic4rl")
-        self.declare_parameter("training_params_path", rclpy.Parameter.Type.STRING)
+        self.declare_parameter("training_params_path",
+                               rclpy.Parameter.Type.STRING)
         self.declare_parameter("main_params_path", rclpy.Parameter.Type.STRING)
 
+        train_params_path = self.get_parameter(
+            "training_params_path").get_parameter_value().string_value
 
-        train_params_path = self.get_parameter("training_params_path").get_parameter_value().string_value
-        
         with open(train_params_path, "r") as train_param_file:
             train_params = yaml.safe_load(train_param_file)["training_params"]
 
-        self.package_name = self.get_parameter("package_name").get_parameter_value().string_value
-        goals_path = os.path.join(get_package_share_directory(self.package_name), "goals_and_poses")
-        self.mode = self.get_parameter("mode").get_parameter_value().string_value
+        self.package_name = self.get_parameter(
+            "package_name").get_parameter_value().string_value
+        goals_path = os.path.join(get_package_share_directory(
+            self.package_name), "goals_and_poses")
+        self.mode = self.get_parameter(
+            "mode").get_parameter_value().string_value
         goals_path = os.path.join(goals_path, self.mode)
-        self.data_path = os.path.join(goals_path, self.get_parameter("data_path").get_parameter_value().string_value)
+        self.data_path = os.path.join(goals_path, self.get_parameter(
+            "data_path").get_parameter_value().string_value)
 
-        self.robot_name = self.get_parameter("robot_name").get_parameter_value().string_value
-        self.goal_tolerance = self.get_parameter("goal_tolerance").get_parameter_value().double_value
-        self.visual_data = self.get_parameter("visual_data").get_parameter_value().string_value
-        self.features = self.get_parameter("features").get_parameter_value().integer_value
-        self.channels = self.get_parameter("channels").get_parameter_value().integer_value
-        self.image_width = self.get_parameter("depth_param.width").get_parameter_value().integer_value
-        self.image_height = self.get_parameter("depth_param.height").get_parameter_value().integer_value
-        self.max_depth = self.get_parameter("depth_param.dist_cutoff").get_parameter_value().double_value
-        self.lidar_distance = self.get_parameter("laser_param.max_distance").get_parameter_value().double_value
-        self.lidar_points = self.get_parameter("laser_param.num_points").get_parameter_value().integer_value
-        self.params_update_freq = self.get_parameter("update_frequency").get_parameter_value().double_value
-        self.sensor_type = self.get_parameter("sensor").get_parameter_value().string_value
+        self.robot_name = self.get_parameter(
+            "robot_name").get_parameter_value().string_value
+        self.goal_tolerance = self.get_parameter(
+            "goal_tolerance").get_parameter_value().double_value
+        self.visual_data = self.get_parameter(
+            "visual_data").get_parameter_value().string_value
+        self.features = self.get_parameter(
+            "features").get_parameter_value().integer_value
+        self.channels = self.get_parameter(
+            "channels").get_parameter_value().integer_value
+        self.image_width = self.get_parameter(
+            "depth_param.width").get_parameter_value().integer_value
+        self.image_height = self.get_parameter(
+            "depth_param.height").get_parameter_value().integer_value
+        self.max_depth = self.get_parameter(
+            "depth_param.dist_cutoff").get_parameter_value().double_value
+        self.lidar_distance = self.get_parameter(
+            "laser_param.max_distance").get_parameter_value().double_value
+        self.lidar_points = self.get_parameter(
+            "laser_param.num_points").get_parameter_value().integer_value
+        self.params_update_freq = self.get_parameter(
+            "update_frequency").get_parameter_value().double_value
+        self.sensor_type = self.get_parameter(
+            "sensor").get_parameter_value().string_value
 
         # ROS 2 setup
         qos = QoSProfile(depth=10)
         self.cmd_vel_pub = self.create_publisher(Twist, "cmd_vel", qos)
         self.reset_world_client = self.create_client(Empty, "reset_world")
         self.pause_physics_client = self.create_client(Empty, "pause_physics")
-        self.unpause_physics_client = self.create_client(Empty, "unpause_physics")
+        self.unpause_physics_client = self.create_client(
+            Empty, "unpause_physics")
         self.sensors = Sensors(self)
 
         # Gymnasium spaces
@@ -72,10 +90,12 @@ class Pic4rlEnvironmentCamera(Node, gym.Env):
         self.image_width = 64    # Example size, you can adjust
         self.num_stacked_images = 4  # Stacking 4 depth images
 
-        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
+        self.action_space = spaces.Box(
+            low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
         self.observation_space = spaces.Box(
-            low=0.0, high=1.0, 
-            shape=(self.num_stacked_images, self.image_height, self.image_width), 
+            low=0.0, high=1.0,
+            shape=(self.num_stacked_images,
+                   self.image_height, self.image_width),
             dtype=np.float32
         )
 
@@ -84,7 +104,6 @@ class Pic4rlEnvironmentCamera(Node, gym.Env):
             (self.num_stacked_images, self.image_height, self.image_width),
             dtype=np.float32
         )
-
 
         # Training variables
         self.episode_step = 0
@@ -95,7 +114,6 @@ class Pic4rlEnvironmentCamera(Node, gym.Env):
         self.change_episode = int(self.train_params["--change_goal_and_pose"])
         self.starting_episodes = int(self.train_params["--starting_episodes"])
 
-        
         # Logging and metrics
         self.logdir = self._create_logdir()
         if self.get_parameter("mode").value == "testing":
@@ -108,17 +126,16 @@ class Pic4rlEnvironmentCamera(Node, gym.Env):
         self.t0 = 0.0
         self.evaluate = False
 
-
-        #if "--model-dir" in train_params:
+        # if "--model-dir" in train_params:
         #    self.model_path = os.path.join(get_package_share_directory(self.package_name),'../../../../', train_params["--model-dir"])
 
-        #if "--rb-path-load" in train_params:
+        # if "--rb-path-load" in train_params:
         #    self.rb_path_load = os.path.join(get_package_share_directory(self.package_name),'../../../../', train_params["--rb-path-load"])
 
         self._spin_sensors_callbacks()
 
-        #elf.get_logger().info(f"Gym mode: {self.mode}")
-        #if self.mode == "testing":
+        # elf.get_logger().info(f"Gym mode: {self.mode}")
+        # if self.mode == "testing":
         #    self.nav_metrics = Navigation_Metrics(self.logdir)
         self.get_logger().debug("PIC4RL_Environment: Starting process")
 
@@ -132,20 +149,22 @@ class Pic4rlEnvironmentCamera(Node, gym.Env):
         lidar_measurements, depth_image, goal_info, robot_pose, collision = self.get_sensor_data()
 
         # Update the buffer: prepend the newest image and remove the oldest
-        self.image_buffer = np.vstack((depth_image[np.newaxis, :], self.image_buffer[:-1]))
+        self.image_buffer = np.vstack(
+            (depth_image[np.newaxis, :], self.image_buffer[:-1]))
 
-        next_observation = self.image_buffer# self.get_observation(goal_info, depth_image)
+        # self.get_observation(goal_info, depth_image)
+        next_observation = self.image_buffer
         done, event = self._check_events(goal_info, collision)
         reward = self._get_reward(goal_info, event)
         truncated = self.episode_step >= self.timeout_steps
-        
+
         if self.mode == "testing":
-            self.nav_metrics.get_metrics_data(lidar_measurements, self.episode_step)
+            self.nav_metrics.get_metrics_data(
+                lidar_measurements, self.episode_step)
 
         self.previous_goal_info = goal_info
         self.episode_step += 1
         return next_observation, reward, done, truncated, {}
-
 
     def reset(self, n_episode, tot_steps, evaluate=False):
         """ """
@@ -156,7 +175,8 @@ class Pic4rlEnvironmentCamera(Node, gym.Env):
         self.collision_count = 0
 
         if self.mode == "testing":
-            self.nav_metrics.calc_metrics(n_episode, self.initial_pose, self.goal_pose)
+            self.nav_metrics.calc_metrics(
+                n_episode, self.initial_pose, self.goal_pose)
             self.nav_metrics.log_metrics_results(n_episode)
             self.nav_metrics.save_metrics_results(n_episode)
 
@@ -169,7 +189,8 @@ class Pic4rlEnvironmentCamera(Node, gym.Env):
         # Reset the buffer with four copies of the first depth image
         self._spin_sensors_callbacks()
         lidar_measurements, depth_image, goal_info, robot_pose, collision = self._get_sensor_data()
-        self.image_buffer = np.stack([depth_image] * self.num_stacked_images, axis=0)
+        self.image_buffer = np.stack(
+            [depth_image] * self.num_stacked_images, axis=0)
 
         # Perform initial step to reset variables
         observation = self.image_buffer
@@ -183,7 +204,8 @@ class Pic4rlEnvironmentCamera(Node, gym.Env):
     def _create_logdir(self):
         """Create a log directory for training."""
         log_path = os.path.join(
-            get_package_share_directory(self.get_parameter("package_name").value),
+            get_package_share_directory(
+                self.get_parameter("package_name").value),
             "../../../../",
             self.train_params["--logdir"],
         )
@@ -192,7 +214,8 @@ class Pic4rlEnvironmentCamera(Node, gym.Env):
     def _load_goals_and_poses(self):
         """Load goals and poses from a JSON file."""
         data_path = os.path.join(
-            get_package_share_directory(self.get_parameter("package_name").value),
+            get_package_share_directory(
+                self.get_parameter("package_name").value),
             "goals_and_poses",
             self.get_parameter("mode").value,
             self.get_parameter("data_path").value,
@@ -208,7 +231,8 @@ class Pic4rlEnvironmentCamera(Node, gym.Env):
         while None in self.sensors.sensor_msg.values():
             self.get_logger().debug(f"empty_measurements")
             rclpy.spin_once(self)
-        self.sensors.sensor_msg = dict.fromkeys(self.sensors.sensor_msg.keys(), None)
+        self.sensors.sensor_msg = dict.fromkeys(
+            self.sensors.sensor_msg.keys(), None)
 
     def _send_action(self, twist):
         """ """
@@ -221,11 +245,14 @@ class Pic4rlEnvironmentCamera(Node, gym.Env):
             "odom": self.sensors.get_odom(),
             "depth": self.sensors.get_depth(),
         }
-        lidar_measurements = sensor_data["scan"] or np.ones(self.lidar_points) * self.lidar_distance
-        depth_image = sensor_data["depth"] or np.ones((self.get_parameter("depth_param.height").value, self.get_parameter("depth_param.width").value, 1)) * self.get_parameter("depth_param.dist_cutoff").value
+        lidar_measurements = sensor_data["scan"] or np.ones(
+            self.lidar_points) * self.lidar_distance
+        depth_image = sensor_data["depth"] or np.ones((self.get_parameter("depth_param.height").value, self.get_parameter(
+            "depth_param.width").value, 1)) * self.get_parameter("depth_param.dist_cutoff").value
         odom = sensor_data["odom"] or [0.0, 0.0, 0.0]
         goal_info, _ = self.process_odom(self.goal_pose, odom)
-        collision = sensor_data["scan"] is None  # Simplified collision detection
+        # Simplified collision detection
+        collision = sensor_data["scan"] is None
 
         depth_image_normalized = depth_image / self.max_depth
 
@@ -255,7 +282,7 @@ class Pic4rlEnvironmentCamera(Node, gym.Env):
             reward += 1000
         elif event == "collision":
             reward += -200
-        #self.get_logger().debug(str(reward))
+        # self.get_logger().debug(str(reward))
         return reward
 
     def _new_episode(self):
@@ -281,7 +308,7 @@ class Pic4rlEnvironmentCamera(Node, gym.Env):
 
         qz = np.sin(yaw / 2)
         qw = np.cos(yaw / 2)
-        state = f"'{'{state: {name: '{self.robot_name}', pose: {position: {x: {x}, y: {y}, z: 0.07}}, orientation: {z: {qz}, w: {qw}}}}'}'"
+        state = f"'{'{state: {name: {self.robot_name}, pose: {position: {x: {x}, y: {y}, z: 0.07}}, orientation: {z: {qz}, w: {qw}}}}'}'"
         subprocess.run(
             f"ros2 service call /test/set_entity_state gazebo_msgs/srv/SetEntityState {state}",
             shell=True,
@@ -300,6 +327,8 @@ class Pic4rlEnvironmentCamera(Node, gym.Env):
             self.goal_pose = self.goals[index]
 
         self.get_logger().info(f"New goal pose: {self.goal_pose}")
+
+
 """
     def pause(self):
         """ """
@@ -318,4 +347,3 @@ class Pic4rlEnvironmentCamera(Node, gym.Env):
         future = self.unpause_physics_client.call_async(req)
         rclpy.spin_until_future_complete(self, future)
 """
-

@@ -21,111 +21,63 @@ import yaml
 
 
 class LaserScanSensor:
-    def __init__(
-        self,
-        max_dist,
-        num_points,
-        robot_type,
-        robot_radius,
-        robot_size,
-        collision_tolerance,
-    ):
+    def __init__(self, max_dist, num_points, robot_type, robot_radius=None, robot_size=None, collision_tolerance=0.05):
         self.max_dist = max_dist
         self.num_points = num_points
-        self.laser_info = [
-            0.0,
-            6.283199787139893,
-            0.01750195026397705,
-        ]  # min angle, max angle, increment
+        self.robot_type = robot_type
+        self.robot_radius = robot_radius
+        self.robot_size = robot_size
+        self.collision_tolerance = collision_tolerance
 
-        self.get_collision_vector(
-            robot_type, robot_radius, robot_size, collision_tolerance
-        )
+        # Validate input dimensions
+        if self.robot_type == "circular" and self.robot_radius is None:
+            raise ValueError("Circular robot type requires a 'robot_radius' parameter.")
+        if self.robot_type == "rectangular" and self.robot_size is None:
+            raise ValueError("Rectangular robot type requires a 'robot_size' parameter as (length, width).")
 
-    def get_collision_vector(
-        self, robot_type, robot_radius, robot_size, collision_tolerance
-    ):
-        """ """
-        if robot_type == "circular":
-            self.collision_vector = np.full(360, robot_radius + collision_tolerance)
+        self.collision_vector = self.get_collision_vector()
 
-        elif robot_type == "rectangular":
-            sL = robot_size[0] / 2 + collision_tolerance  # Rover lenght semiaxis
-            sW = robot_size[1] / 2 + collision_tolerance  # Rover width semiaxis
+    def get_collision_vector():
 
-            degrees = np.arange(0, math.pi * 2, math.pi / 180)
-            vec1 = sL / np.cos(degrees)
-            vec2 = sW / np.sin(degrees + 0.0001)
+        if self.robot_type == "circular":
+            return np.full(360, self.robot_radius + self.collision_tolerance)
 
-            self.collision_vector = np.minimum(np.abs(vec1), np.abs(vec2))
+        elif self.robot_type == "rectangular":
+            sL = self.robot_size[0] / 2 + self.collision_tolerance  # Length semi-axis
+            sW = self.robot_size[1] / 2 + self.collision_tolerance  # Width semi-axis
+
+            degrees = np.linspace(0, 2 * math.pi, 360, endpoint=False)
+            vec1 = sL / np.maximum(np.cos(degrees), 0.0001)
+            vec2 = sW / np.maximum(np.sin(degrees + 0.0001), 0.0001)
+
+            return np.minimum(np.abs(vec1), np.abs(vec2))
+
+        else:
+            return np.full(360, 0.5)
 
     def process_data(self, points):
-        # There are some outliers (0 or nan values, they all are set to 0) that will not be passed to the DRL agent
-        # Correct data:
-        scan_range = []
 
-        min_dist_point = self.max_dist
-        points = np.nan_to_num(
-            points[:], nan=self.max_dist, posinf=self.max_dist, neginf=self.max_dist
-        )
-        points[points < 0.2] = self.max_dist
-        raw_data = points
+        points = np.nan_to_num(points, nan=self.max_dist, posinf=self.max_dist, neginf=self.max_dist)
+
+        # Collision detection
         collision = np.any(points < self.collision_vector)
 
-        min_obstacle_distance = min(points)
-        # max_obstacle_distance = max(points)
-        min_obstacle_angle = np.argmin(points)
-
+        # Add Gaussian noise and clip to valid range
         points = self.add_noise(points)
-        points = np.clip(points, 0.20, self.max_dist)
-        # Takes only num_points
+        points = np.clip(points, 0.2, self.max_dist)
+
+        # Downsample the laser scan points to reduce processing
         div = int(360 / self.num_points)
-
-        # Takes only sensed measurements
         scan_range = np.minimum.reduceat(points, np.arange(0, len(points), div))
-        # print('min obstacle distance: ', min_obstacle_distance)
-        # print('min obstacle angle :', min_obstacle_angle)
-        # print(len(scan_range))
-        # self.plot_points(points)
 
-        return scan_range, min_obstacle_distance, collision 
+        # Get minimum distance and corresponding angle
+        min_obstacle_distance = np.min(points)
+
+        return scan_range, min_obstacle_distance, collision
 
     def add_noise(self, points):
         noise = np.random.normal(loc=0.0, scale=0.05, size=points.shape)
-        noisy_points = points + noise
-        # print('360 noisy lidar points: ', noisy_points)
-        return noisy_points
-
-    def plot_points(self, points):
-        x_coord = []
-        y_coord = []
-
-        x_collision = []
-        y_collision = []
-        degrees = np.arange(0, math.pi * 2, math.pi / 180)
-        for i in range(len(degrees)):
-            angle = degrees[i]
-            x = points[i] * math.cos(-angle)
-            y = points[i] * math.sin(-angle)
-
-            x_c = self.collision_vector[i] * math.cos(-angle)
-            y_c = self.collision_vector[i] * math.sin(-angle)
-
-            x_coord.append(x)
-            y_coord.append(y)
-            x_collision.append(x_c)
-            y_collision.append(y_c)
-
-        plt.scatter(y_coord, x_coord, label="lidar")
-        plt.scatter(y_collision, x_collision, label="collision")
-        plt.ylabel("x [m]")
-        plt.xlabel("y [m]")
-        plt.title("Lidar points")
-        plt.legend()
-        plt.grid(True)
-        plt.show(block=True)
-        plt.pause(1)
-        plt.close()
+        return points + noise
 
 
 class ImuSensor:
@@ -177,30 +129,15 @@ class DepthCamera:
 
         depth_frame = np.nan_to_num(frame, nan=0.0, posinf=max_depth, neginf=0.0)
         depth_frame[depth_frame == 0.0] = max_depth
-        depth_frame = np.minimum(
-            depth_frame, max_depth
-        )  # [m] in simulation, [mm] with real camera
+        depth_frame = np.minimum(depth_frame, max_depth)
+
         if self.random_noise:
             noise1 = np.random.normal(loc=0.0, scale=0.2, size=depth_frame.shape)
-            noise2 = (
-                np.random.normal(loc=0.0, scale=1.0, size=depth_frame.shape)
-                * depth_frame
-                / 10
-            )
-            noise1 = np.clip(noise1, -0.5, 0.5)
-            noise2 = np.clip(noise2, -0.5, 0.5)
+            noise2 = np.random.normal(loc=0.0, scale=1.0, size=depth_frame.shape) * depth_frame / 10
+            depth_frame = np.clip(depth_frame + noise1 + noise2, 0.0, max_depth)
 
-            depth_frame = depth_frame + noise1 + noise2
-            depth_frame = np.clip(depth_frame, 0.0, max_depth)
-
-        depth_frame = cv2.resize(
-            depth_frame, (self.width, self.height), interpolation=cv2.INTER_AREA
-        )
-        depth_frame = np.array(depth_frame, dtype=np.float64)
-        # depth_frame = depth_frame/max_depth
-        # if using a pretrained backbone which normalize data, scale in [0.,255.]
-        # depth_frame = depth_frame*255.0
-        depth_frame = depth_frame.astype(dtype=np.float32)
+        depth_frame = cv2.resize(depth_frame, (self.width, self.height), interpolation=cv2.INTER_AREA)
+        depth_frame = depth_frame.astype(np.float32)
 
         if self.show:
             depth_frame = (
@@ -209,7 +146,8 @@ class DepthCamera:
                 else depth_frame
             )
             depth_frame = (
-                depth_frame * 255.0 if np.amax(depth_frame) <= 1.0 else depth_frame
+                depth_frame *
+                255.0 if np.amax(depth_frame) <= 1.0 else depth_frame
             )
             self.show_image(depth_frame)
 
@@ -308,7 +246,7 @@ class Sensors:
                 self.param["depth_param"]["show_image"],
             )
             self.sensor_msg["depth"] = "None"
-            
+
         if self.param["lidar_enabled"] == "true":
             self.node.get_logger().debug("Laser scan subscription done")
             self.laser_sub = self.node.create_subscription(
@@ -363,7 +301,8 @@ class Sensors:
             return None
 
         if vel:
-            data, velocities = self.odom_process.process_data(self.odom_data, vel)
+            data, velocities = self.odom_process.process_data(
+                self.odom_data, vel)
             return data, velocities
         else:
             data = self.odom_process.process_data(self.odom_data)
