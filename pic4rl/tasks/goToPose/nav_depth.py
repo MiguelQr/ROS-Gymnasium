@@ -3,46 +3,61 @@
 import os
 import numpy as np
 import math
-import subprocess
-import json
 import random
 import time
+import json
 import yaml
-import logging
 from pathlib import Path
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile
 from std_srvs.srv import Empty
 from geometry_msgs.msg import Twist
 from ament_index_python.packages import get_package_share_directory
 from pic4rl.sensors import Sensors
-from pic4rl.utils.env_utils import *
-from pic4rl.testing.nav_metrics import Navigation_Metrics
-
-import gymnasium as gym
-from gymnasium import spaces
+from pic4rl.utils.env_utils import process_odom
 from .ros_gym_env import ROSGymEnv
 
+from gymnasium import spaces
 
-class Pic4rlEnvironmentCamera(ROSGymEnv):
-    def __init__(self):
+
+class DepthNavEnv(ROSGymEnv):
+    def __init__(self, render_mode=None):
         """ """
-        super().__init__("pic4rl_training_camera", "training_params_path")
+        super().__init__("depth_camera_env")
+        if render_mode not in [None, "human", "rgb_array"]:
+            raise ValueError(f"Unsupported render_mode: {render_mode}")
+        self.render_mode = render_mode
+
+        print("DepthNavEnv: Initializing environment")
+
+        self.declare_parameters(
+            namespace="",
+            parameters=[
+                ("data_path", rclpy.Parameter.Type.STRING),
+                ("goal_tolerance", rclpy.Parameter.Type.DOUBLE),
+                ("visual_data", rclpy.Parameter.Type.STRING),
+                ("num_features", rclpy.Parameter.Type.INTEGER),
+                ("depth_param.width", rclpy.Parameter.Type.INTEGER),
+                ("depth_param.height", rclpy.Parameter.Type.INTEGER),
+                ("depth_param.dist_cutoff", rclpy.Parameter.Type.DOUBLE),
+                ("depth_param.stacked_images", rclpy.Parameter.Type.INTEGER),
+                ("laser_param.max_distance", rclpy.Parameter.Type.DOUBLE),
+                ("laser_param.num_points", rclpy.Parameter.Type.INTEGER),
+            ],
+        )
 
         goals_path = os.path.join(get_package_share_directory(self.package_name), "goals_and_poses")
         goals_path = os.path.join(goals_path, self.mode)
         self.data_path = os.path.join(goals_path, self.get_parameter("data_path").get_parameter_value().string_value)
 
         self.goal_tolerance = self.get_parameter("goal_tolerance").get_parameter_value().double_value
-        
         self.visual_data = self.get_parameter("visual_data").get_parameter_value().string_value
         self.num_features = self.get_parameter("num_features").get_parameter_value().integer_value 
 
         self.image_width = self.get_parameter("depth_param.width").get_parameter_value().integer_value
         self.image_height = self.get_parameter("depth_param.height").get_parameter_value().integer_value
-        self.stacked_images = self.get_parameter("depth.stacked_images").get_parameter_value().integer_value
+        self.stacked_images = self.get_parameter("depth_param.stacked_images").get_parameter_value().integer_value
         self.max_depth = self.get_parameter("depth_param.dist_cutoff").get_parameter_value().double_value
         
         self.lidar_distance = self.get_parameter("laser_param.max_distance").get_parameter_value().double_value
@@ -55,7 +70,7 @@ class Pic4rlEnvironmentCamera(ROSGymEnv):
             shape=(self.stacked_images, self.image_height, self.image_width), 
             dtype=np.float32
         )
-        self.cmd_vel_pub = self.create_publisher(Twist, "cmd_vel")
+        self.cmd_vel_pub = self.create_publisher(Twist, "cmd_vel", 10)
 
         # Initialize image buffer
         self.image_buffer = np.zeros(
@@ -72,7 +87,12 @@ class Pic4rlEnvironmentCamera(ROSGymEnv):
         self.collision_count = 0
         self.evaluate = False
 
+        self.starting_episodes = 0
+
+
         self._spin_sensors_callbacks()
+
+        print("After spin_sensors_callbacks")
 
         self.get_logger().debug("PIC4RL_Environment: Starting process")
 
@@ -91,9 +111,10 @@ class Pic4rlEnvironmentCamera(ROSGymEnv):
             "odom": self.sensors.get_odom(),
             "depth": self.sensors.get_depth(),
         }
-        lidar_measurements = sensor_data["scan"] or np.ones(self.lidar_points) * self.lidar_distance
-        depth_image = sensor_data["depth"] or np.ones((self.image_height, self.image_width, 1)) * self.max_depth
-        odom = sensor_data["odom"] or [0.0, 0.0, 0.0]
+        lidar_measurements = sensor_data["scan"] if sensor_data["scan"] is not None else np.ones(self.lidar_points) * self.lidar_distance
+        depth_image = sensor_data["depth"] if sensor_data["depth"] is not None else np.ones((self.image_height, self.image_width, 1)) * self.max_depth
+        odom = sensor_data["odom"] if sensor_data["odom"] is not None else [0.0, 0.0, 0.0]
+
         goal_info, _ = process_odom(self.goal_pose, odom)
         collision = sensor_data["scan"] is None  # Simplified collision detection
 
@@ -110,6 +131,7 @@ class Pic4rlEnvironmentCamera(ROSGymEnv):
 
     def _get_observation(self, sensor_data):
         self.image_buffer = np.vstack((sensor_data["depth_image"][np.newaxis, :], self.image_buffer[:-1]))
+        print(self.image_buffer.shape)
         return self.image_buffer
 
     def _check_events(self, sensor_data):
@@ -147,7 +169,6 @@ class Pic4rlEnvironmentCamera(ROSGymEnv):
     def new_episode(self):
         """Reset the environment for a new episode."""
         self.collision_count = 0
-        
         self._reset_simulation()
         self._respawn_robot()
         self._respawn_goal()
@@ -169,12 +190,18 @@ class Pic4rlEnvironmentCamera(ROSGymEnv):
 
         qz = np.sin(yaw / 2)
         qw = np.cos(yaw / 2)
-        state = f"'{'{state: {name: '{self.robot_name}', pose: {position: {x: {x}, y: {y}, z: 0.07}}, orientation: {z: {qz}, w: {qw}}}}'}'"
-        subprocess.run(
-            f"ros2 service call /test/set_entity_state gazebo_msgs/srv/SetEntityState {state}",
-            shell=True,
-            stdout=subprocess.DEVNULL,
+        state = (
+            f"{{"
+            f"state: {{"
+            f"name: '{self.robot_name}', "
+            f"pose: {{"
+            f"position: {{x: {x}, y: {y}, z: 0.07}}, "
+            f"orientation: {{z: {qz}, w: {qw}}}"
+            f"}}"
+            f"}}"
+            f"}}"
         )
+        os.system(f"ros2 service call /test/set_entity_state gazebo_msgs/srv/SetEntityState {state}")
         time.sleep(0.25)
 
     def _respawn_goal(self):

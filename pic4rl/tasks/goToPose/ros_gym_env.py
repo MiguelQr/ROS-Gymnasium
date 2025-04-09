@@ -1,59 +1,67 @@
 #!/usr/bin/env python3
 
 import os
-import numpy as np
-import time
 import yaml
 import logging
-from pathlib import Path
 
 import rclpy
 from rclpy.node import Node
 from std_srvs.srv import Empty
-from geometry_msgs.msg import Twist
 from ament_index_python.packages import get_package_share_directory
 from pic4rl.sensors import Sensors
-from pic4rl.utils.env_utils import *
+from pic4rl.utils.env_utils import create_logdir
 import gymnasium as gym
-from gymnasium import spaces
 
 from abc import ABC, abstractmethod
 
 
 class ROSGymEnv(Node, gym.Env, ABC):
-    def __init__(self, node_name="rl_base_env"):
+    
+    def __init__(self, node_name: str = "rl_base_env"):
         """ """
-        super().__init__(node_name="rl_base_env")
+        super().__init__(node_name=node_name)
+
+        self.declare_parameters(
+            namespace="",
+            parameters=[
+                ("package_name", rclpy.Parameter.Type.STRING),
+                ("training_params_path", rclpy.Parameter.Type.STRING),
+                ("main_params_path", rclpy.Parameter.Type.STRING),
+                ("mode", rclpy.Parameter.Type.STRING),
+                ("world_name", rclpy.Parameter.Type.STRING),
+                ("robot_name", rclpy.Parameter.Type.STRING),
+                ("sensor", rclpy.Parameter.Type.STRING),
+            ],
+        )
 
         # ROS parameters
-        self.declare_parameter("package_name", "pic4rl")
-        self.declare_parameter("training_params_path", rclpy.Parameter.Type.STRING)
         train_params_path = self.get_parameter("training_params_path").get_parameter_value().string_value
         with open(train_params_path, "r") as train_param_file:
             self.train_params = yaml.safe_load(train_param_file)["training_params"]
 
+        self.main_params_path = self.get_parameter("main_params_path").get_parameter_value().string_value
+        
         self.package_name = self.get_parameter("package_name").get_parameter_value().string_value
         self.mode = self.get_parameter("mode").get_parameter_value().string_value
+        self.world_name = self.get_parameter("world_name").get_parameter_value().string_value
         self.robot_name = self.get_parameter("robot_name").get_parameter_value().string_value
         self.sensor_type = self.get_parameter("sensor").get_parameter_value().string_value
         self.evaluate = False
 
         # ROS 2 setup
-        #qos = QoSProfile(depth=10)
-        #todo self.pause_physics_client = self.create_client(Empty, "pause_physics")
-        #todo self.unpause_physics_client = self.create_client(Empty, "unpause_physics")
-
         self.reset_world_client = self.create_client(Empty, "reset_world")
         self.sensors = Sensors(self)
 
         # Training variables
         self.episode_step = 0
         self.episode = 0
+        self.total_steps = 0 
 
         # Logging and metrics
         self.logdir = self._create_logdir()
-        #todo if self.mode == "testing":
-            #todo self.nav_metrics = Navigation_Metrics(self.logdir)
+
+        # Gazebo process
+        self.gazebo_process = None
 
         self.get_logger().debug(f"{node_name}: Starting process")
 
@@ -64,15 +72,12 @@ class ROSGymEnv(Node, gym.Env, ABC):
 
         sensor_data = self._get_sensor_data()
 
-        next_observation = _get_observation(sensor_data)
+        next_observation = self._get_observation(sensor_data)
         terminated, event = self._check_events(sensor_data)
         reward = self._get_reward(sensor_data)
         truncated = self.episode_step >= self.timeout_steps
         
-        #todo if self.mode == "testing":
-            #todo self.nav_metrics.get_metrics_data(lidar_measurements, self.episode_step)
-
-        self.previous_goal_info = goal_info
+        #self.previous_goal_info = goal_info
         self.episode_step += 1
         return next_observation, reward, terminated, truncated, {}
 
@@ -82,24 +87,41 @@ class ROSGymEnv(Node, gym.Env, ABC):
         self.total_steps += self.episode_step
         self.episode += 1
         self.episode_step = 0
-
-        #todo if self.mode == "testing":
-            #todo self.nav_metrics.calc_metrics(self.episode, self.initial_pose, self.goal_pose)
-            #todo self.nav_metrics.log_metrics_results(self.episode)
-            #todo self.nav_metrics.save_metrics_results(self.episode)
-
         
         logging.info(f"Total_episodes: {self.episode}{' evaluation episode' if self.evaluate else ''}, Total_steps: {self.total_steps}, episode_steps: {self.episode_step+1}\n")
         
         self.new_episode()
-
-        # Reset the buffer with four copies of the first depth image
         self._spin_sensors_callbacks()
 
         sensor_data = self._get_sensor_data()
         next_observation = self._get_observation(sensor_data)
         
         return next_observation, {}
+
+    def render(self, mode="none"):
+        """
+        Render the environment.
+
+        Args:
+            mode (str): The render mode. Options are "human" (GUI) or "none" (headless).
+        """
+        world_path = os.path.join(
+            get_package_share_directory(self.package_name),
+            "worlds",
+            self.world_name,
+        )
+
+        if mode == "human":
+            self.get_logger().info("Launching Gazebo with GUI...")
+            self._launch_gazebo(world_path, headless=False)
+        elif mode == "none":
+            self.get_logger().info("Launching Gazebo in headless mode...")
+            self._launch_gazebo(world_path, headless=True)
+        else:
+            raise ValueError(f"Unsupported render mode: {mode}")
+
+        # Spawn the robot in the world
+        self._spawn_robot()
 
     def close(self):
         self.get_logger().info("Closing environment...")
@@ -115,17 +137,57 @@ class ROSGymEnv(Node, gym.Env, ABC):
         return create_logdir(self.train_params["--policy"], self.sensor_type, log_path)
 
     def _spin_sensors_callbacks(self):
-        """ """
         self.get_logger().debug("spinning node...")
+        print("spinning node...")
         rclpy.spin_once(self)
         while None in self.sensors.sensor_msg.values():
+            print("measurements not ready")
             self.get_logger().debug(f"empty_measurements")
             rclpy.spin_once(self)
         self.sensors.sensor_msg = dict.fromkeys(self.sensors.sensor_msg.keys(), None)
+
+
+    def _launch_gazebo(self, world_path, headless=True):
+        """
+        Launch Gazebo with the specified world file.
+
+        Args:
+            world_path (str): Path to the Gazebo world file.
+            headless (bool): If True, run Gazebo in headless mode (no GUI).
+        """
+        gazebo_cmd = ["gazebo", world_path]
+        if headless:
+            gazebo_cmd.append("--headless-rendering")
+
+        # Launch Gazebo as a subprocess
+        self.gazebo_process = subprocess.Popen(gazebo_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(5)  # Wait for Gazebo to fully launch
+
+    def _spawn_robot(self):
+        """
+        Spawn the robot in the Gazebo world.
+        """
+        # Example robot spawn logic (replace with actual implementation)
+        x, y, z = 0.0, 0.0, 0.1  # Robot spawn position
+        qz, qw = 0.0, 1.0  # Robot orientation (quaternion)
+
+        state = (
+            f"{{"
+            f"state: {{"
+            f"name: '{self.robot_name}', "
+            f"pose: {{"
+            f"position: {{x: {x}, y: {y}, z: {z}}}, "
+            f"orientation: {{z: {qz}, w: {qw}}}"
+            f"}}"
+            f"}}"
+            f"}}"
+        )
+        os.system(f"ros2 service call /test/set_entity_state gazebo_msgs/srv/SetEntityState '{state}'")
+        self.get_logger().info(f"Spawned robot '{self.robot_name}' at position ({x}, {y}, {z}).")    
     
     @abstractmethod
     def _send_action(self, twist):
-        """ """
+        """Transform RL action to ROS command."""
         pass
 
     @abstractmethod

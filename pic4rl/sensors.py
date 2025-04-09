@@ -37,7 +37,7 @@ class LaserScanSensor:
 
         self.collision_vector = self.get_collision_vector()
 
-    def get_collision_vector():
+    def get_collision_vector(self):
 
         if self.robot_type == "circular":
             return np.full(360, self.robot_radius + self.collision_tolerance)
