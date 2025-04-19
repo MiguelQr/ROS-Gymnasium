@@ -60,11 +60,12 @@ class LaserScanSensor:
 
         points = np.nan_to_num(points, nan=self.max_dist, posinf=self.max_dist, neginf=self.max_dist)
 
+        # print("points: ", points[:20])
         # Collision detection
         collision_points = np.sum(points < self.collision_vector)
         print("collision points: ",collision_points)
 
-        collision_threshold = 3  # Adjust based on your lidar resolution
+        collision_threshold = 20  # Adjust based on your lidar resolution
         collision = collision_points >= collision_threshold
 
         # Add Gaussian noise and clip to valid range

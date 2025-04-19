@@ -5,13 +5,12 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 import yaml
 from nav2_common.launch import RewrittenYaml
+import re
 
 def camel_to_snake(s):
-    if len(s) <= 1:
-        return s.lower()
-    # Changing the first character of the input string to lowercase
-    # and calling the recursive function on the modified string
-    return cameltosnake(s[0].lower() + s[1:])
+    """Convert CamelCase to snake_case."""
+    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', s)
+    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
 
 
 def print_params(context, *args, **kwargs):
@@ -48,7 +47,7 @@ def print_params(context, *args, **kwargs):
     task_node = Node(
         package=pkg_name,
         executable=executable_name,
-        name="pic4rl_starter",
+        name="rosgym_starter",
         output="screen",
         emulate_tty=True,
         parameters=[
@@ -67,7 +66,7 @@ def generate_launch_description():
     launch_args = [
         DeclareLaunchArgument("sensor", default_value="", description="sensor type: camera or lidar"),
         DeclareLaunchArgument("task", default_value="", description="task type: goToPose, Following, Vineyards"),
-        DeclareLaunchArgument("pkg_name", default_value="pic4rl", description="package name"),
+        DeclareLaunchArgument("pkg_name", default_value="rosgym", description="package name"),
         DeclareLaunchArgument("main_params", default_value=PathJoinSubstitution([FindPackageShare(pkg_name), "config", "main_params.yaml"]), description="main_params.yaml"),
         DeclareLaunchArgument("training_params", default_value=PathJoinSubstitution([FindPackageShare(pkg_name), "config", "training_params.yaml"]), description="training_params.yaml"),
         DeclareLaunchArgument("mode", default_value="", description="mode: training or testing"),

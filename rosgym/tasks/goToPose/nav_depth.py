@@ -12,7 +12,7 @@ from std_srvs.srv import Empty
 from geometry_msgs.msg import Twist
 from ament_index_python.packages import get_package_share_directory
 from rosgym.utils.env_utils import process_odom
-from .ros_gym_env import ROSGymEnv
+from rosgym.ros_gym_env import ROSGymEnv
 
 from gymnasium import spaces
 
@@ -90,7 +90,7 @@ class DepthNavEnv(ROSGymEnv):
 
         print("Environment Initialized")
 
-        self.get_logger().debug("PIC4RL_Environment: Starting process")
+        self.get_logger().debug("ROSGYM_Environment: Starting process")
 
     def new_episode(self):
         """Reset the environment for a new episode."""
@@ -231,7 +231,7 @@ class DepthNavEnv(ROSGymEnv):
         qw = np.cos(yaw / 2)
         state = (
             f"{{\"state\": {{\"name\": \"{self.robot_name}\", "
-            f"\"pose\": {{\"position\": {{\"x\": {x}, \"y\": {y}, \"z\": 0.01}}, "
+            f"\"pose\": {{\"position\": {{\"x\": {x}, \"y\": {y}, \"z\": 0.02}}, "
             f"\"orientation\": {{\"z\": {qz}, \"w\": {qw}}}}}}}}}"
         )
         os.system(f"ros2 service call /test/set_entity_state gazebo_msgs/srv/SetEntityState {state}  2>/dev/null")

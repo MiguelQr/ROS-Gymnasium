@@ -1,6 +1,6 @@
 main_node:
   ros__parameters:
-    package_name: "pic4rl"
+    package_name: "rosgym"
     # Mode
     mode: "training" # Training or testing
     # Robot parameters
@@ -9,8 +9,8 @@ main_node:
     min_lin_vel: 0.0
     max_ang_vel: 1.0
     min_ang_vel: -1.0
-    robot_type: "rectangular" # rectangular or circular
-    robot_radius: 0.1 # [m], If robot_type is cicrular
+    robot_type: "circular" # rectangular or circular
+    robot_radius: 0.22 # [m], If robot_type is cicrular
     robot_size: [0.508, 0.430] #[0.508, 0.430] # [m, m], Lenght, Width if robot_type is rectangular
     collision_tolerance: 0.01 # [m], tollerance of collision added to robot_radius or robot_size
     warning_tolerance: 0.1 # [m], warning window added to robot_radius or robot_size
