@@ -15,7 +15,7 @@ from sensor_msgs.msg import Image, Imu
 
 from cv_bridge import CvBridge
 
-from pic4rl.utils.env_utils import quat_to_euler, tf_decompose, euler_from_quaternion
+from rosgym.utils.env_utils import quat_to_euler, tf_decompose, euler_from_quaternion
 
 import yaml
 

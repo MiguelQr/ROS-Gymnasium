@@ -8,8 +8,8 @@ import rclpy
 from rclpy.node import Node
 from std_srvs.srv import Empty
 from ament_index_python.packages import get_package_share_directory
-from pic4rl.sensors import Sensors
-from pic4rl.utils.env_utils import create_logdir
+from rosgym.sensors import Sensors
+from rosgym.utils.env_utils import create_logdir
 import gymnasium as gym
 
 from abc import ABC, abstractmethod

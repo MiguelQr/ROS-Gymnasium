@@ -1,23 +1,52 @@
 #!/usr/bin/env python3
 
 import rclpy
-from pic4rl.tasks.goToPose.nav_camera import Pic4rlCamera
+import gymnasium as gym
+from stable_baselines3 import PPO
+from stable_baselines3.common.env_util import make_vec_env
+from rosgym.register_env import register_depth_nav_env
+
 
 def main(args=None):
     rclpy.init(args=args)
 
-    pic4rl_camera = Pic4rlCamera()
+    register_depth_nav_env()
+
+    # Create the environment
+    env = make_vec_env("DepthNavEnv-v0", n_envs=1)
+
+    print(env.observation_space)
+    print(env.action_space)
+
+    # Create the PPO model
+    model = PPO("CnnPolicy", env, verbose=1, policy_kwargs={"normalize_images": False})
+
+    print("Training the model...")
+
+    # Train the model
+    model.learn(total_timesteps=100000, progress_bar=True)
+
+    # Save the model
+    model.save("depth_nav_model")
+
+    # Close the environment
+    env.close()
+
+
+    #pic4rl_camera = DepthNavEnv()
 
     # executor = MultiThreadedExecutor()
     # executor.add_node(pic4rl_camera)
 
+    """
     try:
         # executor.spin()
         pic4rl_camera.threadFunc()
     except KeyboardInterrupt:
         # executor.shutdown()
         pic4rl_camera.destroy_node()
-        rclpy.shutdown()
+    """
+    rclpy.shutdown()
 
 if __name__ == "__main__":
     main()

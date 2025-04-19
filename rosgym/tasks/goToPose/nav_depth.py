@@ -11,7 +11,7 @@ import rclpy
 from std_srvs.srv import Empty
 from geometry_msgs.msg import Twist
 from ament_index_python.packages import get_package_share_directory
-from pic4rl.utils.env_utils import process_odom
+from rosgym.utils.env_utils import process_odom
 from .ros_gym_env import ROSGymEnv
 
 from gymnasium import spaces
