@@ -29,7 +29,14 @@ def main(args=None):
     # Close the environment
     env.close()
 
-    rclpy.shutdown()
+    try:
+        if rclpy.ok():
+            print("Shutting down ROS 2...")
+            rclpy.shutdown()
+    except Exception as e:
+        print(f"Error during shutdown: {e}")
+
+    return 0
 
 if __name__ == "__main__":
     main()
