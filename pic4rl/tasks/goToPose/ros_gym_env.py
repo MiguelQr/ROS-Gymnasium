@@ -74,14 +74,15 @@ class ROSGymEnv(Node, gym.Env, ABC):
 
         next_observation = self._get_observation(sensor_data)
         terminated, event = self._check_events(sensor_data)
+        sensor_data["event"] = event
+
         reward = self._get_reward(sensor_data)
         truncated = self.episode_step >= self.timeout_steps
         
-        #self.previous_goal_info = goal_info
         self.episode_step += 1
         return next_observation, reward, terminated, truncated, {}
 
-    def reset(self, seed=None):
+    def reset(self, seed=None, options=None):
         """ """
         super().reset(seed=seed)
         self.total_steps += self.episode_step
@@ -138,14 +139,14 @@ class ROSGymEnv(Node, gym.Env, ABC):
 
     def _spin_sensors_callbacks(self):
         self.get_logger().debug("spinning node...")
-        print("spinning node...")
+        #print("spinning node...")
         rclpy.spin_once(self)
         while None in self.sensors.sensor_msg.values():
-            print("measurements not ready")
+            #print("measurements not ready")
             self.get_logger().debug(f"empty_measurements")
             rclpy.spin_once(self)
         self.sensors.sensor_msg = dict.fromkeys(self.sensors.sensor_msg.keys(), None)
-
+        #print("measurements ready")
 
     def _launch_gazebo(self, world_path, headless=True):
         """

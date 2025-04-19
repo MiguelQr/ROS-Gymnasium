@@ -36,6 +36,7 @@ class LaserScanSensor:
             raise ValueError("Rectangular robot type requires a 'robot_size' parameter as (length, width).")
 
         self.collision_vector = self.get_collision_vector()
+        self.collision_threshold = 3
 
     def get_collision_vector(self):
 
@@ -60,7 +61,11 @@ class LaserScanSensor:
         points = np.nan_to_num(points, nan=self.max_dist, posinf=self.max_dist, neginf=self.max_dist)
 
         # Collision detection
-        collision = np.any(points < self.collision_vector)
+        collision_points = np.sum(points < self.collision_vector)
+        print("collision points: ",collision_points)
+
+        collision_threshold = 3  # Adjust based on your lidar resolution
+        collision = collision_points >= collision_threshold
 
         # Add Gaussian noise and clip to valid range
         points = self.add_noise(points)
