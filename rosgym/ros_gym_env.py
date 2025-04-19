@@ -11,6 +11,8 @@ from ament_index_python.packages import get_package_share_directory
 from rosgym.sensors import Sensors
 from rosgym.utils.env_utils import create_logdir
 import gymnasium as gym
+import time
+from datetime import timedelta 
 
 from abc import ABC, abstractmethod
 
@@ -63,6 +65,8 @@ class ROSGymEnv(Node, gym.Env, ABC):
         # Gazebo process
         self.gazebo_process = None
 
+        self.start_time = time.time()
+
         self.get_logger().debug(f"{node_name}: Starting process")
 
     def step(self, action):
@@ -88,7 +92,11 @@ class ROSGymEnv(Node, gym.Env, ABC):
         self.total_steps += self.episode_step
         self.episode += 1
         self.episode_step = 0
-        
+
+        episode_time = time.time() - self.start_time
+        formatted_time = str(timedelta(seconds=int(episode_time)))
+
+        print(f"Total steps: {self.total_steps}, total training time: {formatted_time}")
         logging.info(f"Total_episodes: {self.episode}{' evaluation episode' if self.evaluate else ''}, Total_steps: {self.total_steps}, episode_steps: {self.episode_step+1}\n")
         
         self.new_episode()
@@ -100,12 +108,7 @@ class ROSGymEnv(Node, gym.Env, ABC):
         return next_observation, {}
 
     def render(self, mode="none"):
-        """
-        Render the environment.
-
-        Args:
-            mode (str): The render mode. Options are "human" (GUI) or "none" (headless).
-        """
+        """ """
         world_path = os.path.join(
             get_package_share_directory(self.package_name),
             "worlds",
@@ -150,6 +153,7 @@ class ROSGymEnv(Node, gym.Env, ABC):
 
     def _launch_gazebo(self, world_path, headless=True):
         """
+        WIP
         Launch Gazebo with the specified world file.
 
         Args:
@@ -166,6 +170,7 @@ class ROSGymEnv(Node, gym.Env, ABC):
 
     def _spawn_robot(self):
         """
+        WIP
         Spawn the robot in the Gazebo world.
         """
         # Example robot spawn logic (replace with actual implementation)

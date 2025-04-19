@@ -133,14 +133,11 @@ class DepthNavEnv(ROSGymEnv):
         """Get the current observation."""
         depth_image = sensor_data["depth_image"]
         
-        # Print the shape to diagnose
-        #print(f"Depth image shape: {depth_image.shape}")
-        #print(f"Buffer shape: {self.image_buffer.shape}")
         if len(depth_image.shape) == 3 and depth_image.shape[2] == 1:
             depth_image = depth_image.squeeze(2)
         
         self.image_buffer = np.vstack((depth_image[np.newaxis, :], self.image_buffer[:-1]))
-        #print(self.image_buffer.shape)
+        
         return self.image_buffer
 
     def _get_reward(self, sensor_data):

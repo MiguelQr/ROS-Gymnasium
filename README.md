@@ -135,8 +135,6 @@ rosgym/
 
 ## Citation
 
-If you use this software in your research, please cite:
-
 ```bibtex
 @misc{rosgym2025,
   author = {Miguel Quiñones},

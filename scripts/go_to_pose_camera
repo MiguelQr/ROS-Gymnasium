@@ -15,13 +15,10 @@ def main(args=None):
     # Create the environment
     env = make_vec_env("DepthNavEnv-v0", n_envs=1)
 
-    print(env.observation_space)
-    print(env.action_space)
-
-    # Create the PPO model
+    # Create the agent
     model = PPO("CnnPolicy", env, verbose=1, policy_kwargs={"normalize_images": False})
 
-    print("Training the model...")
+    print("Training start")
 
     # Train the model
     model.learn(total_timesteps=100000, progress_bar=True)
@@ -32,20 +29,6 @@ def main(args=None):
     # Close the environment
     env.close()
 
-
-    #pic4rl_camera = DepthNavEnv()
-
-    # executor = MultiThreadedExecutor()
-    # executor.add_node(pic4rl_camera)
-
-    """
-    try:
-        # executor.spin()
-        pic4rl_camera.threadFunc()
-    except KeyboardInterrupt:
-        # executor.shutdown()
-        pic4rl_camera.destroy_node()
-    """
     rclpy.shutdown()
 
 if __name__ == "__main__":
