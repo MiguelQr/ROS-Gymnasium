@@ -8,14 +8,14 @@ A framework for reinforcement learning in robotics that connects Gymnasium envir
 
 ## Overview
 
-ROS-Gym provides a standardized interface for connecting Gymnasium (formerly OpenAI Gym), the popular reinforcement learning library, with Gazebo, a high-fidelity physics simulator. This bridge allows reinforcement learning algorithms to be trained in simulated robotic environments.
+ROS-Gym provides an interface for connecting the Gymnasium (formerly OpenAI Gym) reinforcement learning library, with the Gazebo physics simulator. This bridge allows reinforcement learning agents to be trained in simulated robotic environments.
 
 ## Features
 
 - **Gymnasium Integration**: Compatibility with the Gymnasium API for reinforcement learning.
 - **ROS 2 Based**: Built on ROS 2 for  robotics development.
-- **Multiple Sensor Support**: Handles camera, lidar, and other sensor inputs.
-- **Configurable Environments**: Define new environments with different robots, sensors, and tasks.
+- **Sensor Support**: Handles camera, laser and odom sensors.
+- **Configurable Environments**: Allows to define new environments with different robots, sensors, and tasks.
 
 ## Installation
 
@@ -51,18 +51,10 @@ ROS-Gym provides a standardized interface for connecting Gymnasium (formerly Ope
 
 ## Usage
 
-### Launch a Simple Navigation Task
-
 (WIP) Run the following command to launch a navigation task:
 ```bash
 ros2 launch rosgym starter.launch.py task:=goToPose sensor:=camera mode:=training
 ```
-
-### Parameters
-
-- `task`: Type of navigation task (`goToPose`).
-- `sensor`: Sensor type (`camera`, `lidar`).
-- `mode`: Operation mode (`training`, `testing`).
 
 ## Creating Environments
 
@@ -85,17 +77,8 @@ class CustomEnv(ROSGymEnv):
     def _get_observation(self, sensor_data):
         # Implementation for processing observations
         
-    # Implement other abstract methods...
+    # Abstract methods...
 ```
-
-## Available Environments
-
-- **DepthNavEnv**: Navigate using depth camera.
-- **LaserNavEnv**: Navigate using lidar data.
-
-## Available Worlds
-
-- `obstacle.world`: Environment with specific obstacles.
 
 ## Configuration
 
