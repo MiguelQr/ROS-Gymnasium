@@ -12,8 +12,8 @@ def main(args=None):
 
     register_depth_nav_env()
 
-    # Create the environment
-    env = make_vec_env("DepthNavEnv-v0", n_envs=1)
+    # Create the environment-DepthNavEnv
+    env = make_vec_env("SparseNavEnv-v0", n_envs=1)
 
     # Create the agent
     model = PPO("CnnPolicy", env, verbose=1, policy_kwargs={"normalize_images": False})

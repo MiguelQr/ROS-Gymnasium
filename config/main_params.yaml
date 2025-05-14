@@ -17,8 +17,8 @@ main_node:
     goal_tolerance: 0.4
 
     # World parameters
-    world_name: "tesis_obstacle.world" # Leave empty to obtain no world
-    data_path: "new_indoor.json" # Indicate a goals and poses json file from goals_and_poses folder
+    world_name: "gridworld_6x6.world" # Leave empty to obtain no world
+    data_path: "gridworld.json" # Indicate a goals and poses json file from goals_and_poses folder
 
     # Task parameters
     task: 'goToPose' # goToPose, Following, Vineyards

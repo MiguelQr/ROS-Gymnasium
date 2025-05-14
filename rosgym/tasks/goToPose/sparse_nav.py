@@ -60,7 +60,12 @@ class DepthNavEnv(ROSGymEnv):
         self.lidar_points = self._param("laser_param.num_points", "integer_value")
         
         # Gymnasium spaces
-        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
+        #self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
+        self.action_space = spaces.Box(
+            low=np.array([0.0, -1.0]),  # Linear velocity can only be 0 or positive
+            high=np.array([1.0, 1.0]), 
+            dtype=np.float32
+        )
         self.observation_space = spaces.Box(
             low=0.0, high=self.max_depth, 
             shape=(self.stacked_images, self.image_height, self.image_width), 
@@ -142,27 +147,24 @@ class DepthNavEnv(ROSGymEnv):
         return self.image_buffer
 
     def _get_reward(self, sensor_data):
-        """Calculate the reward based on the event and goal distance."""
-        goal_info = sensor_data["goal_info"]
+        """Calculate the reward based on the event and goal distance.
+        Implements a sparse reward:
+        - Success: 1 - 0.9 * (step_count / max_steps)
+        - Failure or ongoing: 0
+        """
         event = sensor_data["event"]
-        collision = sensor_data["collision"]
-
-        if self.previous_goal_info:
-            reward = (self.previous_goal_info[0] - goal_info[0]) * 30
-        else:
-            reward = 0
-        yaw_reward = (1 - 2 * math.sqrt(abs(goal_info[1] / math.pi))) * 0.6
-        reward += yaw_reward
-
-        self.previous_goal_info = goal_info
-
-        if collision:
-            reward -= 10
-
+        
+        # Store goal_info for potential future use
+        self.previous_goal_info = sensor_data["goal_info"]
+        
+        # Default reward is 0 (sparse reward)
+        reward = 0.0
+        
+        # Only give reward on success (reaching goal)
         if event == "goal":
-            reward += 1000
-        elif event == "collision":
-            reward += -200
+            # Calculate success reward that diminishes with step count
+            reward = 1.0 - 0.9 * (self.episode_step / self.timeout_steps)
+        
         return reward
 
     def _get_sensor_data(self):
@@ -203,43 +205,71 @@ class DepthNavEnv(ROSGymEnv):
         # Use synchronous call instead of async
         future = self.reset_world_client.call_async(req)
         rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
-        #time.sleep(0.5)  # Allow time for reset to complete
+        time.sleep(0.2)  # Allow time for reset to complete
 
     def _respawn_goal(self):
         """Respawn the goal in a new position."""
-        if self.episode <= self.starting_episodes:
-            x = random.uniform(-2.9, 2.9) + self.initial_pose[0]
-            y = random.uniform(-2.9, 2.9) + self.initial_pose[1]
-            self.goal_pose = [x, y]
-        else:
-            index = random.randint(0, len(self.goals) - 1)
-            self.goal_pose = self.goals[index]
-
+        # Choose one of the four quadrants randomly
+        quadrant = random.randint(1, 4)
+        
+        if quadrant == 1:  # Bottom-left quadrant
+            x = random.uniform(-5, -1)
+            y = random.uniform(-5, -1)
+        elif quadrant == 2:  # Top-right quadrant
+            x = random.uniform(1, 5)
+            y = random.uniform(1, 5)
+        elif quadrant == 3:  # Top-left quadrant
+            x = random.uniform(-5, -1)
+            y = random.uniform(1, 5)
+        else:  # Bottom-right quadrant
+            x = random.uniform(1, 5)
+            y = random.uniform(-5, -1)
+            
+        self.goal_pose = [x, y]
         self.get_logger().info(f"New goal pose: {self.goal_pose}")
 
     def _respawn_robot(self):
         """Respawn the robot in a new position."""
-        if self.episode <= self.starting_episodes:
-            x, y, yaw = self.initial_pose
-        else:
-            index = random.randint(0, len(self.poses) - 1)
-            x, y, yaw = self.poses[index]
-
-        qz = np.sin(yaw / 2)
-        qw = np.cos(yaw / 2)
+        # Choose one of the four quadrants randomly
+        quadrant = random.randint(1, 4)
+        
+        if quadrant == 1:  # Bottom-left quadrant
+            x = random.uniform(-7, -1)
+            y = random.uniform(-7, -1)
+        elif quadrant == 2:  # Top-right quadrant
+            x = random.uniform(1, 7)
+            y = random.uniform(1, 7)
+        elif quadrant == 3:  # Top-left quadrant
+            x = random.uniform(-7, -1)
+            y = random.uniform(1, 7)
+        else:  # Bottom-right quadrant
+            x = random.uniform(1, 7)
+            y = random.uniform(-7, -1)
+        
+        # Fixed z value
+        z = 0.2
+        
+        # Fixed quaternion values for orientation
+        qz = 0.1
+        qw = 0.995  # Using approximately sqrt(1-qz²) to maintain unit quaternion
+        
         state = (
             f"{{\"state\": {{\"name\": \"{self.robot_name}\", "
-            f"\"pose\": {{\"position\": {{\"x\": {x}, \"y\": {y}, \"z\": 0.02}}, "
+            f"\"pose\": {{\"position\": {{\"x\": {x}, \"y\": {y}, \"z\": {z}}}, "
             f"\"orientation\": {{\"z\": {qz}, \"w\": {qw}}}}}}}}}"
         )
         os.system(f"ros2 service call /test/set_entity_state gazebo_msgs/srv/SetEntityState {state}  2>/dev/null")
-        #time.sleep(0.25)
 
     def _send_action(self, action):
 
         twist = Twist()
-        twist.linear.x = float(action[0])
+        linear_x = float(action[0])
+        if linear_x < 0:
+            linear_x = 0.0  
+        
+        twist.linear.x = linear_x
         twist.angular.z = float(action[1])
+
         self.cmd_vel_pub.publish(twist)
 
     def _load_goals_and_poses(self):

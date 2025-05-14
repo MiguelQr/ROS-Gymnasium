@@ -33,8 +33,10 @@ install(PROGRAMS
 )
 
 install(
-  DIRECTORY launch config goals_and_poses
+  DIRECTORY launch config goals_and_poses worlds media models
   DESTINATION share/${PROJECT_NAME}
 )
+
+ament_environment_hooks("${CMAKE_CURRENT_SOURCE_DIR}/env-hooks/rosgym.dsv.in")
 
 ament_package()

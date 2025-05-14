@@ -51,10 +51,32 @@ ROS-Gym provides an interface for connecting the Gymnasium (formerly OpenAI Gym)
 
 ## Usage
 
-(WIP) Run the following command to launch a navigation task:
+This launch file provides a unified way to launch Gazebo simulation environments
+with RosgymRL agents.
+
+## Launch Arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| sensor | Camera | Sensor type (Camera/Lidar) |
+| task | GoToPose | Task type (GoToPose, Following, etc.) |
+| mode | training | Mode (training/testing) |
+| pkg_name | rosgym | Package name |
+| world_name | empty.world | Gazebo world file name |
+| use_sim_time | true | Use simulation clock |
+
+## Example Usage
+
+Basic usage:
 ```bash
-ros2 launch rosgym starter.launch.py task:=goToPose sensor:=camera mode:=training
+ros2 launch rosgym training.launch.py
 ```
+
+Custom configuration:
+```bash
+ros2 launch rosgym training.launch.py sensor:=Lidar task:=goToPose mode:=training world_name:=maze.world
+```
+
 
 ## Creating Environments
 
