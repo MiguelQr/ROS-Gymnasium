@@ -173,9 +173,15 @@ def prepare_launch(context, *args, **kwargs):
     
     # Add Gazebo 
     gazebo = launch.actions.ExecuteProcess(
-        cmd=['gazebo', '--verbose', world_path, '-s', 'libgazebo_ros_init.so', '-s', 'libgazebo_ros_factory.so'],
-        output='screen'
+        cmd=[
+            'gazebo', '--verbose', world_path,
+            '-s', 'libgazebo_ros_init.so',
+            '-s', 'libgazebo_ros_factory.so',
+            '-s', 'libgazebo_ros_state.so'
+        ],
+        output='screen',
     )
+
     actions.append(TimerAction(period=5.0, actions=[gazebo]))
     
     # Add rosgym node

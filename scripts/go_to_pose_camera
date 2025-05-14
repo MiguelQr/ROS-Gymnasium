@@ -2,7 +2,7 @@
 
 import rclpy
 import gymnasium as gym
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, A2C
 from stable_baselines3.common.env_util import make_vec_env
 from rosgym.register_env import register_depth_nav_env
 
@@ -12,11 +12,13 @@ def main(args=None):
 
     register_depth_nav_env()
 
+    run_name = "SparseNavEnv-A2C"
+
     # Create the environment-DepthNavEnv
     env = make_vec_env("SparseNavEnv-v0", n_envs=1)
 
     # Create the agent
-    model = PPO("CnnPolicy", env, verbose=1, policy_kwargs={"normalize_images": False})
+    model = A2C("CnnPolicy", env, verbose=1, seed=1, tensorboard_log=f"./results/{run_name}", policy_kwargs={"normalize_images": False})
 
     print("Training start")
 
@@ -24,7 +26,7 @@ def main(args=None):
     model.learn(total_timesteps=100000, progress_bar=True)
 
     # Save the model
-    model.save("depth_nav_model")
+    model.save(f"{run_name}.zip")
 
     # Close the environment
     env.close()

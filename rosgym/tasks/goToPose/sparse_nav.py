@@ -16,6 +16,9 @@ from rosgym.ros_gym_env import ROSGymEnv
 
 from gymnasium import spaces
 
+from gazebo_msgs.srv import SetEntityState
+from gazebo_msgs.msg import EntityState
+from geometry_msgs.msg import Pose, Twist
 
 class DepthNavEnv(ROSGymEnv):
     def __init__(self, render_mode=None):
@@ -78,6 +81,8 @@ class DepthNavEnv(ROSGymEnv):
             (self.stacked_images, self.image_height, self.image_width),
             dtype=np.float32
         )
+
+        self.reset_client = self.create_client(SetEntityState, '/gazebo/set_entity_state')
 
         # Initialize environment
         self.initial_pose, self.goals, self.poses = self._load_goals_and_poses()
@@ -252,13 +257,56 @@ class DepthNavEnv(ROSGymEnv):
         # Fixed quaternion values for orientation
         qz = 0.1
         qw = 0.995  # Using approximately sqrt(1-qz²) to maintain unit quaternion
+
+        request = SetEntityState.Request()
         
-        state = (
-            f"{{\"state\": {{\"name\": \"{self.robot_name}\", "
-            f"\"pose\": {{\"position\": {{\"x\": {x}, \"y\": {y}, \"z\": {z}}}, "
-            f"\"orientation\": {{\"z\": {qz}, \"w\": {qw}}}}}}}}}"
-        )
-        os.system(f"ros2 service call /test/set_entity_state gazebo_msgs/srv/SetEntityState {state}  2>/dev/null")
+        # Set up the entity state
+        state = EntityState()
+        state.name = self.robot_name  # Make sure this is the correct entity name in Gazebo
+        
+        state.reference_frame = "world"
+
+        # Set pose
+        pose = Pose()
+        pose.position.x = float(x)
+        pose.position.y = float(y)
+        pose.position.z = 0.2  # Fixed height
+        pose.orientation.x = 0.0
+        pose.orientation.y = 0.0
+        pose.orientation.z = float(qz)
+        pose.orientation.w = float(qw)
+        state.pose = pose
+        
+        # Set zero twist (velocity)
+        twist = Twist()
+        twist.linear.x = 0.0
+        twist.linear.y = 0.0
+        twist.linear.z = 0.0
+        twist.angular.x = 0.0
+        twist.angular.y = 0.0
+        twist.angular.z = 0.0
+        state.twist = twist
+
+        request.state = state
+
+        #print(f"Setting robot state: {state}")
+        # Call the service to set the entity state
+        future = self.reset_client.call_async(request)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
+
+        # Check response
+        if future.result() is not None:
+            response = future.result()
+            if response.success:
+                self.get_logger().info(f"Robot successfully respawned at [{x}, {y}, {yaw}]")
+            else:
+                self.get_logger().error("Failed to respawn robot")
+                # Fallback to reset_simulation approach
+                self._reset_simulation()
+        else:
+            self.get_logger().error("Service call failed")
+            # Fallback to reset_simulation approach
+            self._reset_simulation()
 
     def _send_action(self, action):
 
