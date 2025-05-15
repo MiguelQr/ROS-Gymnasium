@@ -21,6 +21,6 @@
       </visual>
       <pose frame=''>0 0 0 0 0 0</pose>
     </link>
-    <static>1</static>
+    <static>0</static>
   </model>
 </sdf>

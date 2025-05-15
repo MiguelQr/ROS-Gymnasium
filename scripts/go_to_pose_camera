@@ -12,7 +12,7 @@ def main(args=None):
 
     register_depth_nav_env()
 
-    run_name = "SparseNavEnv-A2C"
+    run_name = "SparseNavEnv-A2C-test"
 
     # Create the environment-DepthNavEnv
     env = make_vec_env("SparseNavEnv-v0", n_envs=1)

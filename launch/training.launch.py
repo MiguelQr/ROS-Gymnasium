@@ -176,8 +176,7 @@ def prepare_launch(context, *args, **kwargs):
         cmd=[
             'gazebo', '--verbose', world_path,
             '-s', 'libgazebo_ros_init.so',
-            '-s', 'libgazebo_ros_factory.so',
-            '-s', 'libgazebo_ros_state.so'
+            '-s', 'libgazebo_ros_factory.so'
         ],
         output='screen',
     )

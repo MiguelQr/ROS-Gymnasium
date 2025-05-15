@@ -82,7 +82,7 @@ class DepthNavEnv(ROSGymEnv):
             dtype=np.float32
         )
 
-        self.reset_client = self.create_client(SetEntityState, '/gazebo/set_entity_state')
+        self.reset_client = self.create_client(SetEntityState, '/set_entity_state')
 
         # Initialize environment
         self.initial_pose, self.goals, self.poses = self._load_goals_and_poses()
@@ -95,6 +95,7 @@ class DepthNavEnv(ROSGymEnv):
         self.evaluate = False
         self.starting_episodes = 0
         self.timeout_steps = 500
+        self.grid_size = 3
 
         self._spin_sensors_callbacks()
 
@@ -159,15 +160,11 @@ class DepthNavEnv(ROSGymEnv):
         """
         event = sensor_data["event"]
         
-        # Store goal_info for potential future use
-        self.previous_goal_info = sensor_data["goal_info"]
+        #self.previous_goal_info = sensor_data["goal_info"]
         
-        # Default reward is 0 (sparse reward)
         reward = 0.0
         
-        # Only give reward on success (reaching goal)
         if event == "goal":
-            # Calculate success reward that diminishes with step count
             reward = 1.0 - 0.9 * (self.episode_step / self.timeout_steps)
         
         return reward
@@ -207,106 +204,127 @@ class DepthNavEnv(ROSGymEnv):
         req = Empty.Request()
         while not self.reset_world_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().warn("Service not available, waiting again...")
-        # Use synchronous call instead of async
+        
         future = self.reset_world_client.call_async(req)
         rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
-        time.sleep(0.2)  # Allow time for reset to complete
+        time.sleep(0.1)  
 
     def _respawn_goal(self):
         """Respawn the goal in a new position."""
-        # Choose one of the four quadrants randomly
+
         quadrant = random.randint(1, 4)
         
-        if quadrant == 1:  # Bottom-left quadrant
-            x = random.uniform(-5, -1)
-            y = random.uniform(-5, -1)
-        elif quadrant == 2:  # Top-right quadrant
-            x = random.uniform(1, 5)
-            y = random.uniform(1, 5)
-        elif quadrant == 3:  # Top-left quadrant
-            x = random.uniform(-5, -1)
-            y = random.uniform(1, 5)
-        else:  # Bottom-right quadrant
-            x = random.uniform(1, 5)
-            y = random.uniform(-5, -1)
-            
+        if quadrant == 1:  
+            x = random.uniform(-self.grid_size, -1)
+            y = random.uniform(-self.grid_size, -1)
+        elif quadrant == 2:  
+            x = random.uniform(1, self.grid_size)
+            y = random.uniform(1, self.grid_size)
+        elif quadrant == 3: 
+            x = random.uniform(-self.grid_size, -1)
+            y = random.uniform(1, self.grid_size)
+        else: 
+            x = random.uniform(1, self.grid_size)
+            y = random.uniform(-self.grid_size, -1)
+    
         self.goal_pose = [x, y]
-        self.get_logger().info(f"New goal pose: {self.goal_pose}")
-
-    def _respawn_robot(self):
-        """Respawn the robot in a new position."""
-        # Choose one of the four quadrants randomly
-        quadrant = random.randint(1, 4)
-        
-        if quadrant == 1:  # Bottom-left quadrant
-            x = random.uniform(-7, -1)
-            y = random.uniform(-7, -1)
-        elif quadrant == 2:  # Top-right quadrant
-            x = random.uniform(1, 7)
-            y = random.uniform(1, 7)
-        elif quadrant == 3:  # Top-left quadrant
-            x = random.uniform(-7, -1)
-            y = random.uniform(1, 7)
-        else:  # Bottom-right quadrant
-            x = random.uniform(1, 7)
-            y = random.uniform(-7, -1)
-        
-        # Fixed z value
-        z = 0.2
-        
-        # Fixed quaternion values for orientation
-        qz = 0.1
-        qw = 0.995  # Using approximately sqrt(1-qz²) to maintain unit quaternion
-
+    
         request = SetEntityState.Request()
-        
-        # Set up the entity state
         state = EntityState()
-        state.name = self.robot_name  # Make sure this is the correct entity name in Gazebo
-        
+        state.name = 'goal' 
         state.reference_frame = "world"
 
-        # Set pose
-        pose = Pose()
-        pose.position.x = float(x)
-        pose.position.y = float(y)
-        pose.position.z = 0.2  # Fixed height
-        pose.orientation.x = 0.0
-        pose.orientation.y = 0.0
-        pose.orientation.z = float(qz)
-        pose.orientation.w = float(qw)
-        state.pose = pose
-        
-        # Set zero twist (velocity)
-        twist = Twist()
-        twist.linear.x = 0.0
-        twist.linear.y = 0.0
-        twist.linear.z = 0.0
-        twist.angular.x = 0.0
-        twist.angular.y = 0.0
-        twist.angular.z = 0.0
-        state.twist = twist
+        state.pose.position.x = float(x)
+        state.pose.position.y = float(y)
+        state.pose.position.z = 0.05
+        state.pose.orientation.x = 0.0
+        state.pose.orientation.y = 0.0
+        state.pose.orientation.z = 0.0
+        state.pose.orientation.w = 1.0
+
+        state.twist.linear.x = 0.0
+        state.twist.linear.y = 0.0
+        state.twist.linear.z = 0.0
+        state.twist.angular.x = 0.0
+        state.twist.angular.y = 0.0
+        state.twist.angular.z = 0.0
 
         request.state = state
 
-        #print(f"Setting robot state: {state}")
-        # Call the service to set the entity state
         future = self.reset_client.call_async(request)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=1.0)
 
-        # Check response
         if future.result() is not None:
-            response = future.result()
-            if response.success:
-                self.get_logger().info(f"Robot successfully respawned at [{x}, {y}, {yaw}]")
+            if future.result().success:
+                self.get_logger().info(f"Goal teleported to [{x:.2f}, {y:.2f}]")
+                return True
             else:
-                self.get_logger().error("Failed to respawn robot")
-                # Fallback to reset_simulation approach
-                self._reset_simulation()
+                self.get_logger().error("Goal teleportation failed (service returned False)")
         else:
-            self.get_logger().error("Service call failed")
-            # Fallback to reset_simulation approach
-            self._reset_simulation()
+            self.get_logger().error("Goal teleportation service call timed out")
+        
+        self.get_logger().warn("Using logical goal position even though teleportation failed")
+        return False
+
+    def _respawn_robot(self):
+        """Respawn the robot in a new position"""
+
+        quadrant = random.randint(1, 4)
+        
+        if quadrant == 1:
+            x = random.uniform(-self.grid_size, -1)
+            y = random.uniform(-self.grid_size, -1)
+        elif quadrant == 2:
+            x = random.uniform(1, self.grid_size)
+            y = random.uniform(1, self.grid_size)
+        elif quadrant == 3:
+            x = random.uniform(-self.grid_size, -1)
+            y = random.uniform(1, self.grid_size)
+        else:
+            x = random.uniform(1, self.grid_size)
+            y = random.uniform(-self.grid_size, -1)
+
+        yaw = random.uniform(0, 2 * math.pi)
+    
+        qz = math.sin(yaw / 2.0)
+        qw = math.cos(yaw / 2.0) 
+        
+        request = SetEntityState.Request()
+        state = EntityState()
+        state.name = self.robot_name
+        state.reference_frame = "world"
+
+        state.pose.position.x = float(x)
+        state.pose.position.y = float(y)
+        state.pose.position.z = 0.1
+    
+        state.pose.orientation.x = 0.0
+        state.pose.orientation.y = 0.0
+        state.pose.orientation.z = float(qz)
+        state.pose.orientation.w = float(qw)
+
+        state.twist.linear.x = 0.0
+        state.twist.linear.y = 0.0
+        state.twist.linear.z = 0.0
+        state.twist.angular.x = 0.0
+        state.twist.angular.y = 0.0
+        state.twist.angular.z = 0.0
+
+        request.state = state
+
+        future = self.reset_client.call_async(request)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=1.0)
+
+        if future.result() is not None:
+            if future.result().success:
+                self.get_logger().info(f"Robot teleported to [{x:.2f}, {y:.2f}]")
+                return True
+            else:
+                self.get_logger().error("Teleportation failed (service returned False)")
+        else:
+            self.get_logger().error("Service call timed out")
+        
+        return self._reset_simulation()
 
     def _send_action(self, action):
 
