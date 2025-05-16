@@ -166,7 +166,8 @@ def prepare_launch(context, *args, **kwargs):
             '-entity', 'goal', 
             '-file', goal_entity, 
             '-x', str(goal_pose[0]),
-            '-y', str(goal_pose[1])
+            '-y', str(goal_pose[1]), 
+            '-z', '0.05'
         ]
     )
     actions.append(spawn_goal)

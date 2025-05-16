@@ -46,6 +46,8 @@ class DepthNavEnv(ROSGymEnv):
             ],
         )
 
+        self.MIN_LINEAR_VELOCITY = 0.01
+
         goals_path = os.path.join(get_package_share_directory(self.package_name), "goals_and_poses")
         goals_path = os.path.join(goals_path, self.mode)
         self.data_path = os.path.join(goals_path, self.get_parameter("data_path").get_parameter_value().string_value)
@@ -65,7 +67,7 @@ class DepthNavEnv(ROSGymEnv):
         # Gymnasium spaces
         #self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
         self.action_space = spaces.Box(
-            low=np.array([0.0, -1.0]),  # Linear velocity can only be 0 or positive
+            low=np.array([self.MIN_LINEAR_VELOCITY, -1.0]),  # Linear velocity can only be 0 or positive
             high=np.array([1.0, 1.0]), 
             dtype=np.float32
         )
@@ -127,13 +129,14 @@ class DepthNavEnv(ROSGymEnv):
             self.collision_count += 1
             if self.collision_count >= 3:
                 self.collision_count = 0
-                self.get_logger().info(f"COLLISION DETECTED.")
+                self.get_logger().info(f"Collision Detected.")
                 return True, "collision"
         else:
             self.collision_count = 0
         
         if goal_info[0] < self.goal_tolerance:
             self.goal_count += 1
+            self.get_logger().info(f"Goal Reached.")
             return True, "goal"
         elif self.episode_step >= self.timeout_steps:
             return True, "timeout"
@@ -198,6 +201,10 @@ class DepthNavEnv(ROSGymEnv):
         }
 
         return sensor_data_dic
+    
+    def _log_results(self):
+        print(f"Goals reached: {self.goal_count}")
+
     
     def _reset_simulation(self):
         """Reset the Gazebo simulation."""
@@ -330,8 +337,8 @@ class DepthNavEnv(ROSGymEnv):
 
         twist = Twist()
         linear_x = float(action[0])
-        if linear_x < 0:
-            linear_x = 0.0  
+        if linear_x < self.MIN_LINEAR_VELOCITY:
+            linear_x = self.MIN_LINEAR_VELOCITY  
         
         twist.linear.x = linear_x
         twist.angular.z = float(action[1])

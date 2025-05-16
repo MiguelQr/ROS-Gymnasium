@@ -5,14 +5,101 @@ import gymnasium as gym
 from stable_baselines3 import PPO, A2C
 from stable_baselines3.common.env_util import make_vec_env
 from rosgym.register_env import register_depth_nav_env
+import torch as th
+import numpy as np
 
+import collections
+from stable_baselines3.common.base_class import BaseAlgorithm
+from stable_baselines3.common.callbacks import CallbackList, EvalCallback, BaseCallback
+from adaptative_rnd_action import AdaptiveRND
+
+SEED = 10
+INTRINSIC_REWARD = True
+USE_SELF_SUPERVISION = False
+USE_PREDICTOR_HEAD = False
+USE_NOISY = True
+USE_NOVELTY_BUFFER = False
+
+class OnPolicyCallback(BaseCallback):
+    """
+    A custom callback for combining RLeXplore and on-policy algorithms from SB3.
+    """
+
+    def __init__(self, irs, verbose=0):
+        super().__init__(verbose)
+        self.irs = irs
+        self.buffer = None
+        self.device = irs.device if hasattr(irs, 'device') else 'cpu'
+
+    def init_callback(self, model: BaseAlgorithm) -> None:
+        super().init_callback(model)
+        self.buffer = self.model.rollout_buffer
+        self.int_rewards_buffer = collections.deque(maxlen=100)
+
+    def _on_step(self) -> bool:
+        """
+        This method will be called by the model after each call to `env.step()`.
+
+        :return: (bool) If the callback returns False, training is aborted early.
+        """
+
+        if self.int_rewards_buffer:
+            mean_int_rewards = sum(self.int_rewards_buffer) / \
+                len(self.int_rewards_buffer)
+            self.logger.record('rollout/mean_int_rewards', mean_int_rewards)
+
+        return True
+
+    def _on_rollout_end(self) -> None:
+        # ===================== compute the intrinsic rewards ===================== #
+        # prepare the data samples
+        obs = th.as_tensor(self.buffer.observations, device=self.device)
+        actions = th.as_tensor(self.buffer.actions, device=self.device)
+        rewards = th.as_tensor(self.buffer.rewards, device=self.device)
+        dones = th.as_tensor(self.buffer.episode_starts,
+                             device=self.device)
+        # get the new observations
+        new_obs = th.roll(obs, -1, dims=0)
+        new_obs[-1] = th.as_tensor(self.locals["new_obs"],
+                                   device=self.device)
+        # print(obs.shape, actions.shape, rewards.shape, dones.shape, obs.shape)
+        # compute the intrinsic rewards
+        intrinsic_rewards = self.irs.compute(
+            samples=dict(observations=obs, actions=actions,
+                         rewards=rewards, terminateds=dones,
+                         truncateds=dones, next_observations=new_obs),
+            sync=True)
+        rewards_np = intrinsic_rewards.detach().cpu().numpy()
+    
+        # Debug info
+        buffer_shape = self.buffer.advantages.shape
+        reward_shape = rewards_np.shape
+        
+        # Ensure rewards match the buffer dimensions
+        if rewards_np.shape != buffer_shape:
+            # Handle the case where rewards are (n_steps, 1) but buffer is (n_steps, n_envs)
+            if len(rewards_np.shape) == 2 and rewards_np.shape[1] == 1:
+                rewards_np = np.broadcast_to(rewards_np, buffer_shape)
+            else:
+                # For other shape mismatches, try to reshape properly
+                rewards_np = rewards_np.reshape(buffer_shape)
+
+        # add the intrinsic rewards to the buffer
+        self.buffer.advantages += rewards_np
+        self.buffer.returns += rewards_np
+        # ===================== compute the intrinsic rewards ===================== #
+
+        self.int_rewards_buffer.append(intrinsic_rewards.mean().item())
 
 def main(args=None):
     rclpy.init(args=args)
 
+    device = 'cuda'
+    num_envs = 16
+
     register_depth_nav_env()
 
-    run_name = "SparseNavEnv-A2C-test"
+    run_name = "SparseNavEnv-A2C-novelid"
 
     # Create the environment-DepthNavEnv
     env = make_vec_env("SparseNavEnv-v0", n_envs=1)
@@ -21,9 +108,22 @@ def main(args=None):
     model = A2C("CnnPolicy", env, verbose=1, seed=1, tensorboard_log=f"./results/{run_name}", policy_kwargs={"normalize_images": False})
 
     print("Training start")
+    print(f"Using intrinsic reward: {INTRINSIC_REWARD}")
+
+    
+    if not INTRINSIC_REWARD:
+        model.learn(total_timesteps=100000, progress_bar=True)
+
+    else:
+        irs = AdaptiveRND(env, device=device, latent_dim=64, use_noisy=USE_NOISY, beta=0.1,
+                          use_self_supervision=USE_SELF_SUPERVISION, use_novelty_buffer=USE_NOVELTY_BUFFER, use_predictor_head=USE_PREDICTOR_HEAD)
+        model.learn(total_timesteps=100000,
+                    callback=CallbackList(
+            [OnPolicyCallback(irs)]),
+            progress_bar=True)
 
     # Train the model
-    model.learn(total_timesteps=100000, progress_bar=True)
+    
 
     # Save the model
     model.save(f"{run_name}.zip")

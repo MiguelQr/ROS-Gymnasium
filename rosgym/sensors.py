@@ -61,7 +61,7 @@ class LaserScanSensor:
         points = np.nan_to_num(points, nan=self.max_dist, posinf=self.max_dist, neginf=self.max_dist)
 
         collision_points = np.sum(points < self.collision_vector)
-        collision_threshold = 20
+        collision_threshold = 15
         collision = collision_points >= collision_threshold
 
         # Add Gaussian noise and clip to valid range

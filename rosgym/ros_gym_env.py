@@ -124,6 +124,7 @@ class ROSGymEnv(Node, gym.Env, ABC):
 
     def close(self):
         self.get_logger().info("Closing environment...")
+        self._log_results()
         #self.gazebo_process.terminate()
         #self.gazebo_process.wait(timeout=5)
         rclpy.shutdown()
@@ -135,6 +136,50 @@ class ROSGymEnv(Node, gym.Env, ABC):
             self.train_params["--logdir"],
         )
         return create_logdir(self.train_params["--policy"], self.sensor_type, log_path)
+    
+    def _emergency_reset(self):
+        """
+        Emergency reset when sensors stop responding.
+        Attempts to reset the simulation to recover from potential physics issues.
+        
+        Returns:
+            bool: True if reset was successful
+        """
+        try:
+            self.get_logger().warn("Attempting emergency robot reset...")
+            
+            if hasattr(self, 'cmd_vel_pub'):
+                from geometry_msgs.msg import Twist
+                stop_cmd = Twist()
+                self.cmd_vel_pub.publish(stop_cmd)
+            
+            if not self.reset_world_client.wait_for_service(timeout_sec=1.0):
+                self.get_logger().error("Reset world service not available")
+                return False
+                
+            req = Empty.Request()
+            future = self.reset_world_client.call_async(req)
+            rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
+            
+            time.sleep(0.2)
+            
+            self.sensors.sensor_msg = dict.fromkeys(self.sensors.sensor_msg.keys(), None)
+            recovery_attempts = 0
+            while None in self.sensors.sensor_msg.values() and recovery_attempts < 20:
+                rclpy.spin_once(self, timeout_sec=0.1)
+                recovery_attempts += 1
+            
+            missing = [k for k, v in self.sensors.sensor_msg.items() if v is None]
+            if len(missing) < len(self.sensors.sensor_msg):
+                self.get_logger().info(f"Received some sensor data, still missing: {missing}")
+                return True
+            else:
+                self.get_logger().error("No sensor data received after reset")
+                return False
+            
+        except Exception as e:
+            self.get_logger().error(f"Emergency reset failed: {e}")
+            return False
     
     def _launch_gazebo(self, world_path, headless=True):
         cmd = ["gazebo", world_path]
@@ -148,15 +193,32 @@ class ROSGymEnv(Node, gym.Env, ABC):
     def _param(self, name, dtype):
         return self.get_parameter(name).get_parameter_value().__getattribute__(dtype)
 
-    def _spin_sensors_callbacks(self):
+    def _spin_sensors_callbacks(self, max_attempts=100):
         self.get_logger().debug("Spinning node until sensors ready...")
         rclpy.spin_once(self)
         retries = 0
         while None in self.sensors.sensor_msg.values():
             rclpy.spin_once(self, timeout_sec=0.1)
             retries += 1
-            if retries > 100:
-                raise TimeoutError("Sensor data not received after 100 attempts.")
+        
+            # Log which sensors we're waiting for if we've waited a while
+            if retries == 50:
+                missing = [k for k, v in self.sensors.sensor_msg.items() if v is None]
+                self.get_logger().warn(f"Waiting for sensors: {missing}")
+        
+            # Try recovery if we timeout
+            if retries > max_attempts:
+                missing = [k for k, v in self.sensors.sensor_msg.items() if v is None]
+                self.get_logger().error(f"Sensor timeout: missing {missing} after {max_attempts} attempts.")
+                
+                # Attempt emergency recovery
+                if self._emergency_reset():
+                    self.get_logger().info("Emergency recovery successful")
+                    break
+                else:
+                    self.get_logger().error("Emergency recovery failed")
+                    raise TimeoutError(f"Sensor data not received after {max_attempts} attempts.")
+
         self.sensors.sensor_msg = dict.fromkeys(self.sensors.sensor_msg.keys(), None)
         
     def _spawn_robot(self):
@@ -206,6 +268,11 @@ class ROSGymEnv(Node, gym.Env, ABC):
     def _get_sensor_data(self):
         """Retrieve sensor data from the robot."""
         pass  
+
+    @abstractmethod
+    def _log_results(self):
+        """Log results to file."""
+        pass
     
     @abstractmethod
     def _send_action(self, twist):
