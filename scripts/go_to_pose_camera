@@ -11,7 +11,7 @@ import numpy as np
 import collections
 from stable_baselines3.common.base_class import BaseAlgorithm
 from stable_baselines3.common.callbacks import CallbackList, EvalCallback, BaseCallback
-from adaptative_rnd_action import AdaptiveRND
+from custom_rnd_noisy import AdaptiveRND
 
 SEED = 10
 INTRINSIC_REWARD = True
@@ -99,24 +99,24 @@ def main(args=None):
 
     register_depth_nav_env()
 
-    run_name = "SparseNavEnv-A2C-novelid"
+    run_name = "SparseNavEnvDiscrete-PPO-id"
 
     # Create the environment-DepthNavEnv
-    env = make_vec_env("SparseNavEnv-v0", n_envs=1)
+    env = make_vec_env("SparseNavEnvDiscrete-v0", n_envs=1)
 
     # Create the agent
-    model = A2C("CnnPolicy", env, verbose=1, seed=1, tensorboard_log=f"./results/{run_name}", policy_kwargs={"normalize_images": False})
+    model = PPO("CnnPolicy", env, verbose=1, seed=1, tensorboard_log=f"./results/{run_name}", policy_kwargs={"normalize_images": False})
 
     print("Training start")
     print(f"Using intrinsic reward: {INTRINSIC_REWARD}")
 
     
     if not INTRINSIC_REWARD:
-        model.learn(total_timesteps=100000, progress_bar=True)
+        model.learn(total_timesteps=500000, progress_bar=True)
 
     else:
         irs = AdaptiveRND(env, device=device, latent_dim=64, use_noisy=USE_NOISY, beta=0.1,
-                          use_self_supervision=USE_SELF_SUPERVISION, use_novelty_buffer=USE_NOVELTY_BUFFER, use_predictor_head=USE_PREDICTOR_HEAD)
+                          use_self_supervision=USE_SELF_SUPERVISION)
         model.learn(total_timesteps=100000,
                     callback=CallbackList(
             [OnPolicyCallback(irs)]),

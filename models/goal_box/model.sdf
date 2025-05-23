@@ -5,11 +5,11 @@
     <link name='goal_box'>
       <gravity>0</gravity>
       <visual name='goal_box'>
-        <pose frame=''>0 0 0.03 0 -0 0</pose>
+        <pose frame=''>0 0 0.2 0 -0 0</pose>
         <geometry>
           <cylinder>
             <radius>0.11</radius>
-            <length>0.1</length>
+            <length>0.2</length>
           </cylinder>
         </geometry>
         <material>
@@ -22,12 +22,13 @@
       </visual>
       <pose frame=''>0 0 0 0 0 0</pose>
     </link>
+    <!--
     <collision name='collision'>
-      <pose frame=''>0 0 0.03 0 -0 0</pose>
+      <pose frame=''>0 0 0.2 0 -0 0</pose>
       <geometry>
         <cylinder>
           <radius>0.11</radius>
-          <length>0.1</length>
+          <length>0.2</length>
         </cylinder>
       </geometry>
       <surface>
@@ -39,6 +40,7 @@
         </friction>
       </surface>
     </collision>
+    -->
     <static>0</static>
   </model>
 </sdf>

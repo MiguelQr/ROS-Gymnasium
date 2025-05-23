@@ -61,13 +61,25 @@ class DepthNavEnv(ROSGymEnv):
 
         self.lidar_distance = self._param("laser_param.max_distance", "double_value")
         self.lidar_points = self._param("laser_param.num_points", "integer_value")
+
+        self.LINEAR_VELOCITIES = [0.2, 0.4]  # two linear velocities
+        self.ANGULAR_VELOCITIES = [
+            math.pi/6,   # 30 degrees/s right turn
+            math.pi/12,  # 15 degrees/s right turn
+            0.0,         # straight
+            -math.pi/12, # 15 degrees/s left turn
+            -math.pi/6   # 30 degrees/s left turn
+        ]
         
-        # Gymnasium spaces
-        self.action_space = spaces.Box(
-            low=np.array([self.MIN_LINEAR_VELOCITY, -1.0]),  # Linear velocity can only be 0 or positive
-            high=np.array([1.0, 1.0]), 
-            dtype=np.float32
-        )
+        # Create all combinations [0.2, π/6], [0.2, π/12], ..., [0.4, -π/6]
+        self.actions = []
+        for lin_vel in self.LINEAR_VELOCITIES:
+            for ang_vel in self.ANGULAR_VELOCITIES:
+                self.actions.append((lin_vel, ang_vel))
+                
+        # Gymnasium spaces - use Discrete instead of Box
+        self.action_space = spaces.Discrete(len(self.actions))
+        
         self.observation_space = spaces.Box(
             low=0.0, high=self.max_depth, 
             shape=(self.stacked_images, self.image_height, self.image_width), 
@@ -110,7 +122,7 @@ class DepthNavEnv(ROSGymEnv):
         stop_twist.angular.z = 0.0
         self.cmd_vel_pub.publish(stop_twist)
 
-        self._reset_simulation()
+        #self._reset_simulation()
         self._respawn_robot()
         self._respawn_goal()
         time.sleep(0.25)
@@ -188,7 +200,7 @@ class DepthNavEnv(ROSGymEnv):
 
         goal_info, _ = process_odom(self.goal_pose, odom)
 
-        #depth_image_normalized = depth_image / self.max_depth
+        depth_image_normalized = depth_image / self.max_depth
 
         sensor_data_dic = {
             "scan": lidar_measurements,
@@ -300,7 +312,7 @@ class DepthNavEnv(ROSGymEnv):
 
         state.pose.position.x = float(x)
         state.pose.position.y = float(y)
-        state.pose.position.z = 0.1
+        state.pose.position.z = 0.05
     
         state.pose.orientation.x = 0.0
         state.pose.orientation.y = 0.0
@@ -334,12 +346,11 @@ class DepthNavEnv(ROSGymEnv):
     def _send_action(self, action):
 
         twist = Twist()
-        linear_x = float(action[0])
-        if linear_x < self.MIN_LINEAR_VELOCITY:
-            linear_x = self.MIN_LINEAR_VELOCITY  
+
+        linear_x, angular_z = self.actions[action]
         
         twist.linear.x = linear_x
-        twist.angular.z = float(action[1])
+        twist.angular.z = angular_z
 
         self.cmd_vel_pub.publish(twist)
 

@@ -24,7 +24,6 @@ class ROSGymEnv(Node, gym.Env, ABC):
     
     def __init__(self, node_name: str = "rl_base_env"):
         super().__init__(node_name=node_name)
-        self.get_logger().debug(f"{node_name}: Starting process")
 
         self.declare_parameters(
             namespace="",
@@ -194,7 +193,7 @@ class ROSGymEnv(Node, gym.Env, ABC):
         return self.get_parameter(name).get_parameter_value().__getattribute__(dtype)
 
     def _spin_sensors_callbacks(self, max_attempts=100):
-        self.get_logger().debug("Spinning node until sensors ready...")
+        #self.get_logger().debug("Spinning node until sensors ready...")
         rclpy.spin_once(self)
         retries = 0
         while None in self.sensors.sensor_msg.values():

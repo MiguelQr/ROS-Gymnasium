@@ -25,17 +25,17 @@ def generate_random_position():
     quadrant = random.randint(1, 4)
     
     if quadrant == 1:  # Bottom-left quadrant
-        x = random.uniform(-5, -1)
-        y = random.uniform(-5, -1)
+        x = random.uniform(-3, -1)
+        y = random.uniform(-3, -1)
     elif quadrant == 2:  # Top-right quadrant
-        x = random.uniform(1, 5)
-        y = random.uniform(1, 5)
+        x = random.uniform(1, 3)
+        y = random.uniform(1, 3)
     elif quadrant == 3:  # Top-left quadrant
-        x = random.uniform(-5, -1)
-        y = random.uniform(1, 5)
+        x = random.uniform(-3, -1)
+        y = random.uniform(1, 3)
     else:  # Bottom-right quadrant
-        x = random.uniform(1, 5)
-        y = random.uniform(-5, -1)
+        x = random.uniform(1, 3)
+        y = random.uniform(-3, -1)
     
     # Random orientation (yaw)
     yaw = random.uniform(0, 6.28)
@@ -150,7 +150,7 @@ def prepare_launch(context, *args, **kwargs):
             '-entity', config_params["robot_name"], 
             '-x', str(robot_pose[0]),
             '-y', str(robot_pose[1]), 
-            '-z', '0.1',
+            '-z', '0.05',
             '-Y', str(robot_pose[2]),
             '-topic', '/robot_description'
         ],

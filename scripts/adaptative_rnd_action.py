@@ -37,7 +37,7 @@ class AdaptiveRND(BaseReward):
         self.use_novelty_buffer = use_novelty_buffer
         self.use_self_supervision = use_self_supervision
         self.alpha = alpha
-        self.use_novelid = True
+        self.use_novelid = False
 
         self.predictor = ObservationEncoder(
             obs_shape=self.obs_shape,

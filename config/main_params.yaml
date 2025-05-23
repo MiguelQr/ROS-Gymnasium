@@ -14,7 +14,7 @@ main_node:
     robot_size: [0.508, 0.430] #[0.508, 0.430] # [m, m], Lenght, Width if robot_type is rectangular
     collision_tolerance: 0.01 # [m], tollerance of collision added to robot_radius or robot_size
     warning_tolerance: 0.1 # [m], warning window added to robot_radius or robot_size
-    goal_tolerance: 0.22
+    goal_tolerance: 0.33
 
     # World parameters
     world_name: "gridworld_4x4.world" # Leave empty to obtain no world
@@ -44,7 +44,7 @@ main_node:
       max_distance: 2.0 # Meters
       num_points: 36 # int divider of 360
     depth_param:
-      dist_cutoff: 5.0 # Meters
+      dist_cutoff: 3.0 # Meters
       width: 160
       height: 128
       stacked_images: 4
