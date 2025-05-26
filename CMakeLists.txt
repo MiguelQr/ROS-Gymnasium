@@ -32,6 +32,11 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
+install(PROGRAMS
+  scripts/multi_agent_training
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 install(
   DIRECTORY launch config goals_and_poses worlds media models
   DESTINATION share/${PROJECT_NAME}

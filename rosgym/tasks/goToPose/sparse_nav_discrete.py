@@ -175,9 +175,11 @@ class DepthNavEnv(ROSGymEnv):
         reward = 0.0
         
         if event == "goal":
-            reward = 1.0 - 0.9 * (self.episode_step / self.timeout_steps)
+            reward = 100#2.0 - 0.9 * (self.episode_step / self.timeout_steps)
         elif event == "collision":
-            reward = -0.1
+            reward = -10#-0.5
+        elif event == "timeout":
+            reward = -5# -0.25
         
         return reward
 

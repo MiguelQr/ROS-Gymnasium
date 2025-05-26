@@ -277,3 +277,77 @@ class ROSGymEnv(Node, gym.Env, ABC):
     def _send_action(self, twist):
         """Transform RL action to ROS command."""
         pass
+    
+    def _spin_all_sensors_callbacks(self, max_attempts=100):
+        """Spin node to receive callbacks for all sensors."""
+        # First, check if the robots are actually spawned in Gazebo
+        try:
+            from gazebo_msgs.msg import ModelStates
+            from rclpy.qos import QoSProfile, ReliabilityPolicy
+            
+            # Create a temporary subscription to check model states
+            qos = QoSProfile(depth=1)
+            qos.reliability = ReliabilityPolicy.BEST_EFFORT
+            
+            model_states = None
+            def model_callback(msg):
+                nonlocal model_states
+                model_states = msg.name
+            
+            model_sub = self.node.create_subscription(
+                ModelStates, 
+                '/model_states', 
+                model_callback,
+                qos
+            )
+            
+            # Try to get model states to see if robots exist
+            attempt = 0
+            while model_states is None and attempt < 10:
+                rclpy.spin_once(self.node, timeout_sec=0.5)
+                attempt += 1
+            
+            if model_states:
+                existing_robots = [name for name in self.robot_namespaces if name in model_states]
+                missing_robots = [name for name in self.robot_namespaces if name not in model_states]
+                
+                if missing_robots:
+                    self._logger.error(f"Missing robots in Gazebo: {missing_robots}")
+                    self._logger.error(f"Available models in Gazebo: {model_states}")
+                else:
+                    self._logger.info(f"All robots successfully spawned in Gazebo: {existing_robots}")
+            else:
+                self._logger.error("Could not get model states from Gazebo")
+                
+            # Clean up temporary subscription
+            self.node.destroy_subscription(model_sub)
+        
+        except Exception as e:
+            self._logger.error(f"Error checking robot existence: {str(e)}")
+        
+        #self.get_logger().debug("Spinning node until sensors ready...")
+        rclpy.spin_once(self)
+        retries = 0
+        while None in self.sensors.sensor_msg.values():
+            rclpy.spin_once(self, timeout_sec=0.1)
+            retries += 1
+        
+            # Log which sensors we're waiting for if we've waited a while
+            if retries == 50:
+                missing = [k for k, v in self.sensors.sensor_msg.items() if v is None]
+                self.get_logger().warn(f"Waiting for sensors: {missing}")
+        
+            # Try recovery if we timeout
+            if retries > max_attempts:
+                missing = [k for k, v in self.sensors.sensor_msg.items() if v is None]
+                self.get_logger().error(f"Sensor timeout: missing {missing} after {max_attempts} attempts.")
+                
+                # Attempt emergency recovery
+                if self._emergency_reset():
+                    self.get_logger().info("Emergency recovery successful")
+                    break
+                else:
+                    self.get_logger().error("Emergency recovery failed")
+                    raise TimeoutError(f"Sensor data not received after {max_attempts} attempts.")
+
+        self.sensors.sensor_msg = dict.fromkeys(self.sensors.sensor_msg.keys(), None)
