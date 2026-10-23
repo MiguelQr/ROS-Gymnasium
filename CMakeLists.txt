@@ -21,6 +21,11 @@ if(BUILD_TESTING)
   # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/test_gymnasium_api.py")
+    find_package(ament_cmake_pytest REQUIRED)
+    ament_add_pytest_test(test_gymnasium_api test/test_gymnasium_api.py TIMEOUT 300)
+  endif()
 endif()
 
 # Install Python modules
@@ -32,10 +37,7 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(PROGRAMS
-  scripts/multi_agent_training
-  DESTINATION lib/${PROJECT_NAME}
-)
+# scripts/multi_agent_training is work in progress and intentionally not installed
 
 install(
   DIRECTORY launch config goals_and_poses worlds media models

@@ -1,8 +1,6 @@
 # ROS-Gym
 
-<img alt="ROS2" src="https://img.shields.io/badge/ROS2-Foxy-blue">
-<img alt="Gymnasium" src="https://img.shields.io/badge/Gymnasium-Latest-green">
-<img alt="Gazebo" src="https://img.shields.io/badge/Gazebo-11-orange">
+![ROS 2](https://img.shields.io/badge/ROS%202-Foxy%20%7C%20Humble-blue) ![Gymnasium](https://img.shields.io/badge/Gymnasium-Latest-green) ![Gazebo](https://img.shields.io/badge/Gazebo-11-orange)
 
 A framework for reinforcement learning in robotics that connects Gymnasium environments to Gazebo simulations through ROS 2.
 
@@ -21,7 +19,7 @@ ROS-Gym provides an interface for connecting the Gymnasium (formerly OpenAI Gym)
 
 ### Prerequisites
 
-- ROS 2 Foxy
+- ROS 2 Foxy (Ubuntu 20.04) or ROS 2 Humble (Ubuntu 22.04), tested on both
 - Gazebo 11
 - Python 3.8+
 
@@ -35,7 +33,7 @@ ROS-Gym provides an interface for connecting the Gymnasium (formerly OpenAI Gym)
 
 2. **Clone this repository**:
    ```bash
-   git clone https://github.com/yourusername/rosgym.git
+   git clone https://github.com/MiguelQr/ROS-Gymnasium.git
    ```
 
 3. **Install dependencies**:
@@ -59,7 +57,7 @@ with RosgymRL agents.
 | Argument | Default | Description |
 |----------|---------|-------------|
 | sensor | Camera | Sensor type (Camera/Lidar) |
-| task | GoToPose | Task type (GoToPose, Following, etc.) |
+| task | GoToPose | Task type (GoToPose) |
 | mode | training | Mode (training/testing) |
 | pkg_name | rosgym | Package name |
 | world_name | empty.world | Gazebo world file name |
@@ -109,6 +107,18 @@ Environment parameters can be configured in the YAML files located in the `confi
 - `main_params.yaml`: Main parameters for the environments.
 - `training_params.yaml`: Parameters specific to training algorithms.
 
+## Testing
+
+`test/test_gymnasium_api.py` runs Gymnasium's `check_env` on every registered environment and also checks that a timeout is reported as `truncated`, that `reset(seed=...)` is reproducible, and that the frame stack is cleared on reset. It replaces the simulator with deterministic fakes, so Gazebo does not need to be running:
+
+```bash
+colcon test --packages-select rosgym --event-handlers console_direct+
+```
+
+## Work in Progress
+
+- **Multi-robot training** (`launch/multi_robot_training.launch.py`, `rosgym/multi_robot_sensors.py`, `scripts/multi_agent_training`): the environment class `MultiRobotNavEnv` is not included yet, so this pipeline is not registered or installed.
+
 ## Project Structure
 
 ```
@@ -146,7 +156,7 @@ rosgym/
   title = {ROS-Gym},
   year = {2025},
   publisher = {GitHub},
-  howpublished = {\url{https://github.com/MiguelQr/ROSRL}}
+  howpublished = {\url{https://github.com/MiguelQr/ROS-Gymnasium}}
 }
 
 @inproceedings{martini2023pic4rl,
