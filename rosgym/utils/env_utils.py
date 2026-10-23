@@ -40,6 +40,13 @@ def create_logdir(policy, sensor, logdir):
         level=logging.INFO)
     return str(Path(os.path.join(logdir, logdir_)))
 
+def depth_to_rgb(depth, max_depth):
+    """
+    Convert a depth image in [0, max_depth] to an (H, W, 3) uint8 grayscale image.
+    """
+    gray = (np.clip(depth / max_depth, 0.0, 1.0) * 255).astype(np.uint8)
+    return np.repeat(gray[:, :, np.newaxis], 3, axis=2)
+
 def euler_from_quaternion(quat):
     """
     Converts quaternion (w in last place) to euler roll, pitch, yaw

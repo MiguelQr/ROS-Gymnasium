@@ -4,7 +4,6 @@ import os
 import math
 import yaml
 import logging
-import subprocess
 import time
 from datetime import timedelta
 from abc import ABC, abstractmethod
@@ -23,7 +22,8 @@ def _param(self, name: str, type_: str):
     return getattr(self.get_parameter(name).get_parameter_value(), type_)
 
 class ROSGymEnv(Node, gym.Env, ABC):
-    
+    metadata = {"render_modes": ["rgb_array"], "render_fps": 15}
+
     def __init__(self, node_name: str = "rl_base_env"):
         super().__init__(node_name=node_name)
 
@@ -68,7 +68,6 @@ class ROSGymEnv(Node, gym.Env, ABC):
         self.episode = 0
         self.total_steps = 0 
         self.start_time = time.time()
-        self.gazebo_process = None
         self.logdir = self._create_logdir()
 
         self.get_logger().debug(f"{node_name}: Starting process")
@@ -117,23 +116,15 @@ class ROSGymEnv(Node, gym.Env, ABC):
         
         return next_obs, {}
 
-    def render(self, mode="none"):
-        world_path = os.path.join(
-            get_package_share_directory(self.package_name),
-            "worlds",
-            self.world_name,
-        )
-
-        headless = mode != "human"
-        self.get_logger().info(f"Launching Gazebo {'in headless mode' if headless else 'with GUI'}...")
-        self._launch_gazebo(world_path, headless=headless)
-        self._spawn_robot()
+    def render(self):
+        """Return the latest camera frame as an (H, W, 3) uint8 array when render_mode is "rgb_array"."""
+        if self.render_mode == "rgb_array":
+            return self._render_frame()
+        return None
 
     def close(self):
         self.get_logger().info("Closing environment...")
         self._log_results()
-        #self.gazebo_process.terminate()
-        #self.gazebo_process.wait(timeout=5)
         rclpy.shutdown()
 
     def _create_logdir(self):
@@ -212,15 +203,6 @@ class ROSGymEnv(Node, gym.Env, ABC):
             return False
         return future.result().success
 
-    def _launch_gazebo(self, world_path, headless=True):
-        cmd = ["gazebo", world_path]
-        if headless:
-            cmd.append("--headless-rendering")
-        self.gazebo_process = subprocess.Popen(
-            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-        time.sleep(5)
-    
     def _param(self, name, dtype):
         return self.get_parameter(name).get_parameter_value().__getattribute__(dtype)
 
@@ -252,28 +234,9 @@ class ROSGymEnv(Node, gym.Env, ABC):
 
         self.sensors.sensor_msg = dict.fromkeys(self.sensors.sensor_msg.keys(), None)
         
-    def _spawn_robot(self):
-        """
-        WIP
-        Spawn the robot in the Gazebo world.
-        """
-        # Example robot spawn logic (replace with actual implementation)
-        x, y, z = 0.0, 0.0, 0.1  # Robot spawn position
-        qz, qw = 0.0, 1.0  # Robot orientation (quaternion)
-
-        state = (
-            f"{{"
-            f"state: {{"
-            f"name: '{self.robot_name}', "
-            f"pose: {{"
-            f"position: {{x: {x}, y: {y}, z: {z}}}, "
-            f"orientation: {{z: {qz}, w: {qw}}}"
-            f"}}"
-            f"}}"
-            f"}}"
-        )
-        os.system(f"ros2 service call /test/set_entity_state gazebo_msgs/srv/SetEntityState '{state}'")
-        self.get_logger().info(f"Spawned robot '{self.robot_name}' at position ({x}, {y}, {z}).")  
+    def _render_frame(self):
+        """Latest camera frame as an (H, W, 3) uint8 array, or None if the task has no camera."""
+        return None
 
     @abstractmethod
     def _check_events(self, sensor_data):

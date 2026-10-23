@@ -91,7 +91,8 @@ def env(request, ros_context, monkeypatch, tmp_path, teleports):
 
 def test_check_env(env):
     """Runs Gymnasium's environment checker."""
-    check_env(env, skip_render_check=True)
+    env.render_mode = "rgb_array"
+    check_env(env)
 
 
 def test_timeout(env):
@@ -128,3 +129,15 @@ def test_reset_clear(env):
 
     assert np.all(obs[0] > 0.0)
     assert np.all(obs[1:] == 0.0)
+
+
+def test_render(env):
+    """rgb_array render returns the latest depth frame as an RGB image."""
+    env.render_mode = "rgb_array"
+    env.reset(seed=0)
+
+    frame = env.render()
+
+    assert frame.dtype == np.uint8
+    assert frame.shape == (env.image_height, env.image_width, 3)
+    assert np.all(frame == int(CAMERA_DEPTH / env.max_depth * 255))

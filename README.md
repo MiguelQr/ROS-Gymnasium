@@ -14,6 +14,7 @@ ROS-Gym provides an interface for connecting the Gymnasium (formerly OpenAI Gym)
 - **ROS 2 Based**: Built on ROS 2 for  robotics development.
 - **Sensor Support**: Handles camera, laser and odom sensors.
 - **Configurable Environments**: Allows to define new environments with different robots, sensors, and tasks.
+- **Image Recording**: `render_mode="rgb_array"` returns the robot's depth view.
 
 ## Installation
 

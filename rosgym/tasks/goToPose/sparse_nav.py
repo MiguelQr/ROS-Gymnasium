@@ -10,7 +10,7 @@ import rclpy
 from std_srvs.srv import Empty
 from geometry_msgs.msg import Twist
 from ament_index_python.packages import get_package_share_directory
-from rosgym.utils.env_utils import process_odom
+from rosgym.utils.env_utils import depth_to_rgb, process_odom
 from rosgym.ros_gym_env import ROSGymEnv
 
 from gymnasium import spaces
@@ -19,7 +19,7 @@ class DepthNavEnv(ROSGymEnv):
     def __init__(self, render_mode=None):
         """ """
         super().__init__("depth_camera_env")
-        if render_mode not in [None, "human", "rgb_array"]:
+        if render_mode is not None and render_mode not in self.metadata["render_modes"]:
             raise ValueError(f"Unsupported render_mode: {render_mode}")
         self.render_mode = render_mode
 
@@ -139,6 +139,10 @@ class DepthNavEnv(ROSGymEnv):
         self.image_buffer[0] = depth_image
         
         return self.image_buffer
+
+    def _render_frame(self):
+        """Latest depth frame as an RGB image."""
+        return depth_to_rgb(self.image_buffer[0], self.max_depth)
 
     def _get_reward(self, sensor_data):
         """Calculate the reward based on the event and goal distance.
