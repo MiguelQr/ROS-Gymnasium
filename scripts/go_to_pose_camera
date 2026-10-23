@@ -1,28 +1,56 @@
 #!/usr/bin/env python3
 
+import os
+
 import rclpy
-from stable_baselines3 import PPO
+import yaml
+from ament_index_python.packages import get_package_share_directory
+from stable_baselines3 import A2C, PPO
 from stable_baselines3.common.env_util import make_vec_env
 from rosgym.register_env import register_envs
+
+ALGORITHMS = {"PPO": PPO, "A2C": A2C}
+
+
+def load_training_params():
+    """Load training_params.yaml from the path given by the launch file, or the installed default."""
+    default_path = os.path.join(get_package_share_directory("rosgym"), "config", "training_params.yaml")
+
+    node = rclpy.create_node("rosgym_trainer")
+    path = node.declare_parameter("training_params_path", default_path).value
+    node.destroy_node()
+
+    with open(path, "r") as file:
+        return yaml.safe_load(file)["training_params"]
 
 
 def main(args=None):
     rclpy.init(args=args)
 
+    params = load_training_params()
     register_envs()
 
-    run_name = "SparseNavEnvDiscrete-PPO-1M"
+    algorithm = params["algorithm"]
+    run_name = f"{params['env_id']}-{algorithm}-seed{params['seed']}"
 
     # Create the environment
-    env = make_vec_env("SparseNavEnvDiscrete-v0", n_envs=1)
+    env = make_vec_env(params["env_id"], n_envs=1)
 
     # Create the agent
-    model = PPO("CnnPolicy", env, verbose=1, seed=1, tensorboard_log=f"./results/{run_name}", policy_kwargs={"normalize_images": False})
+    model = ALGORITHMS[algorithm](
+        params["policy"],
+        env,
+        verbose=1,
+        seed=params["seed"],
+        tensorboard_log=os.path.join(params["tensorboard_log"], run_name),
+        policy_kwargs={"normalize_images": False},
+        **params["algorithm_params"],
+    )
 
-    print("Training start")
+    print(f"Training start: {run_name}")
 
     # Train the model
-    model.learn(total_timesteps=1000000, progress_bar=True)
+    model.learn(total_timesteps=params["total_timesteps"], progress_bar=True)
 
     # Save the model
     model.save(f"{run_name}.zip")

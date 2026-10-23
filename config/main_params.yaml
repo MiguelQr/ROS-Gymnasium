@@ -21,22 +21,19 @@ main_node:
     data_path: "gridworld.json" # Indicate a goals and poses json file from goals_and_poses folder
 
     # Task parameters
-    task: 'goToPose' # goToPose, Following, Vineyards
+    task: 'goToPose'
     
     # Sensors parameters
     update_frequency: 15.0
     sensor: 'camera' # lidar or camera
-    visual_data: 'features'
-    num_features: 12544
     channels: 1
 
     imu_enabled: "false"
     camera_enabled: "true"
-    stereo_camera_enabled: "false"
     lidar_enabled: "true"
     sensors_topic:
       rgb_topic: "/camera_color/image_raw"
-      depth_topic: "/camera/depth/image_raw" # "/camera_stereo/depth/image_raw" 
+      depth_topic: "/camera/depth/image_raw"
       laser_topic: "/scan" # /scan or /front/scan
       imu_topic: "/imu/data" #imu_data or /imu/data
       odom_topic: "/odom" # /odom or /jackal/ground_truth
@@ -52,17 +49,4 @@ main_node:
     rgb_param:
       width: 640
       height: 480
-      show_image: False 
-
-    # Metrics
-    robot_poses: True
-    robot_velocities: True
-    path_distance: True
-    distance_path_ratio: False
-    clearance_time: True
-    mean_velocities: True
-    max_min_accelerations: True
-    cumulative_heading_average: True
-    obstacle_clearance: False
-    following_heading_metrics: False
-    row_crop_path_comparison: False
+      show_image: False

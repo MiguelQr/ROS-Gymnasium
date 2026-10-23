@@ -31,8 +31,6 @@ class DepthNavEnv(ROSGymEnv):
             parameters=[
                 ("data_path", rclpy.Parameter.Type.STRING),
                 ("goal_tolerance", rclpy.Parameter.Type.DOUBLE),
-                ("visual_data", rclpy.Parameter.Type.STRING),
-                ("num_features", rclpy.Parameter.Type.INTEGER),
                 ("depth_param.width", rclpy.Parameter.Type.INTEGER),
                 ("depth_param.height", rclpy.Parameter.Type.INTEGER),
                 ("depth_param.dist_cutoff", rclpy.Parameter.Type.DOUBLE),
@@ -47,8 +45,6 @@ class DepthNavEnv(ROSGymEnv):
         self.data_path = os.path.join(goals_path, self.get_parameter("data_path").get_parameter_value().string_value)
 
         self.goal_tolerance = self._param("goal_tolerance", "double_value")
-        self.visual_data = self._param("visual_data", "string_value")
-        self.num_features = self._param("num_features", "integer_value")
         
         self.image_width = self._param("depth_param.width", "integer_value")
         self.image_height = self._param("depth_param.height", "integer_value")

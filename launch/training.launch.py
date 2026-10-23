@@ -215,7 +215,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "task", 
             default_value="GoToPose", 
-            description="Task type: GoToPose, Following, Vineyards"
+            description="Task type: GoToPose"
         ),
         DeclareLaunchArgument(
             "mode", 
