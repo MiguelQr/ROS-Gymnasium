@@ -76,6 +76,30 @@ TensorBoard logs are written to `./results/<run_name>` and the trained model is 
 tensorboard --logdir results
 ```
 
+### Training with Stable-Baselines3
+
+The environments are standard Gymnasium environments, so any Gymnasium-compatible library can train them. `scripts/go_to_pose_camera` uses [Stable-Baselines3](https://github.com/DLR-RM/stable-baselines3) and reduces to:
+
+```python
+import gymnasium as gym
+import rclpy
+from stable_baselines3 import PPO
+from ros_gymnasium.register_env import register_envs
+
+rclpy.init()
+register_envs()
+
+env = gym.make("SparseNavEnvDiscrete-v0")
+model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)
+model.learn(total_timesteps=1_000_000)
+model.save("ppo_sparse_nav")
+
+env.close()
+rclpy.shutdown()
+```
+
+The environment reads its ROS parameters and needs Gazebo running, which is why it is started through `training.launch.py`. To change the algorithm, environment or hyperparameters, edit `config/training_params.yaml` (`algorithm: A2C`, `env_id: SparseNavEnv-v0`, ...).
+
 ### Launch Arguments
 
 | Argument | Default | Description |
@@ -159,7 +183,6 @@ ROS-Gymnasium/
 │   └── utils/env_utils.py
 ├── scripts/
 │   └── go_to_pose_camera         # SB3 training entry point
-├── research/                     # Adaptive RND exploration experiments (not installed)
 └── test/
     └── test_gymnasium_api.py
 ```
@@ -168,7 +191,7 @@ ROS-Gymnasium/
 
 Released under the [MIT License](LICENSE).
 
-Parts of the sensor handling and simulation setup are adapted from [PIC4rl_gym](https://github.com/PIC4SeR/PIC4rl_gym) (Martini et al., see Citation). `research/base_reward.py` is from [RLeXplore](https://github.com/RLE-Foundation/RLeXplore) and keeps its MIT License header.
+Parts of the sensor handling and simulation setup are adapted from [PIC4rl_gym](https://github.com/PIC4SeR/PIC4rl_gym) (Martini et al., see Citation).
 
 ## Citation
 
