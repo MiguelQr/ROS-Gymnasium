@@ -6,20 +6,22 @@ import gymnasium as gym
 
 def register_envs():
     gym.envs.registration.register(
-        id="DepthNavEnv-v0",  # Unique ID for the environment
-        entry_point="rosgym.tasks.goToPose.nav_depth:DepthNavEnv",  # Path to the environment class
+        id="DenseNavEnv-v0",  # Unique ID for the environment
+        entry_point="rosgym.tasks.goToPose.dense_nav:DenseNavEnv",  # Path to the environment class
         nondeterministic=True,
     )
-    print("Registered DepthNavEnv-v0 environment.")
+    print("Registered DenseNavEnv-v0 environment.")
     gym.envs.registration.register(
         id="SparseNavEnvDiscrete-v0",  # Unique ID for the environment
-        entry_point="rosgym.tasks.goToPose.sparse_nav_discrete:DepthNavEnv",  # Path to the environment class
+        entry_point="rosgym.tasks.goToPose.sparse_nav:SparseNavEnv",  # Path to the environment class
+        kwargs={"action_type": "discrete", "timeout_steps": 500},
         nondeterministic=True,
     )
     print("Registered SparseNavEnvDiscrete-v0 environment.")
     gym.envs.registration.register(
         id="SparseNavEnv-v0",  # Unique ID for the environment
-        entry_point="rosgym.tasks.goToPose.sparse_nav:DepthNavEnv",  # Path to the environment class
+        entry_point="rosgym.tasks.goToPose.sparse_nav:SparseNavEnv",  # Path to the environment class
+        kwargs={"action_type": "continuous", "timeout_steps": 300},
         nondeterministic=True,
     )
     print("Registered SparseNavEnv-v0 environment.")

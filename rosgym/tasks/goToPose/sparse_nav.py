@@ -15,13 +15,27 @@ from rosgym.ros_gym_env import ROSGymEnv
 
 from gymnasium import spaces
 
-class DepthNavEnv(ROSGymEnv):
-    def __init__(self, render_mode=None):
-        """ """
+ACTION_TYPES = ("discrete", "continuous")
+
+
+class SparseNavEnv(ROSGymEnv):
+    """
+    Go-to-goal navigation from stacked depth images with a sparse reward.
+
+    Args:
+        action_type: "discrete" (10 fixed velocity commands) or "continuous" ([linear, angular] velocity)
+        timeout_steps: Steps before the episode is truncated
+        render_mode: None or "rgb_array"
+    """
+
+    def __init__(self, action_type="discrete", timeout_steps=500, render_mode=None):
         super().__init__("depth_camera_env")
         if render_mode is not None and render_mode not in self.metadata["render_modes"]:
             raise ValueError(f"Unsupported render_mode: {render_mode}")
+        if action_type not in ACTION_TYPES:
+            raise ValueError(f"Unsupported action_type: {action_type}, expected one of {ACTION_TYPES}")
         self.render_mode = render_mode
+        self.action_type = action_type
 
         self.declare_parameters(
             namespace="",
@@ -44,7 +58,7 @@ class DepthNavEnv(ROSGymEnv):
         self.data_path = os.path.join(goals_path, self.get_parameter("data_path").get_parameter_value().string_value)
 
         self.goal_tolerance = self._param("goal_tolerance", "double_value")
-        
+
         self.image_width = self._param("depth_param.width", "integer_value")
         self.image_height = self._param("depth_param.height", "integer_value")
         self.stacked_images = self._param("depth_param.stacked_images", "integer_value")
@@ -52,16 +66,35 @@ class DepthNavEnv(ROSGymEnv):
 
         self.lidar_distance = self._param("laser_param.max_distance", "double_value")
         self.lidar_points = self._param("laser_param.num_points", "integer_value")
-        
+
         # Gymnasium spaces
-        self.action_space = spaces.Box(
-            low=np.array([self.MIN_LINEAR_VELOCITY, -1.0]),  # Linear velocity can only be 0 or positive
-            high=np.array([1.0, 1.0]), 
-            dtype=np.float32
-        )
+        if self.action_type == "discrete":
+            self.LINEAR_VELOCITIES = [0.2, 0.4]  # two linear velocities
+            self.ANGULAR_VELOCITIES = [
+                math.pi/6,   # 30 degrees/s right turn
+                math.pi/12,  # 15 degrees/s right turn
+                0.0,         # straight
+                -math.pi/12, # 15 degrees/s left turn
+                -math.pi/6   # 30 degrees/s left turn
+            ]
+
+            # All combinations [0.2, π/6], [0.2, π/12], ..., [0.4, -π/6]
+            self.actions = [
+                (lin_vel, ang_vel)
+                for lin_vel in self.LINEAR_VELOCITIES
+                for ang_vel in self.ANGULAR_VELOCITIES
+            ]
+            self.action_space = spaces.Discrete(len(self.actions))
+        else:
+            self.action_space = spaces.Box(
+                low=np.array([self.MIN_LINEAR_VELOCITY, -1.0], dtype=np.float32),  # Linear velocity can only be positive
+                high=np.array([1.0, 1.0], dtype=np.float32),
+                dtype=np.float32
+            )
+
         self.observation_space = spaces.Box(
-            low=0.0, high=self.max_depth, 
-            shape=(self.stacked_images, self.image_height, self.image_width), 
+            low=0.0, high=self.max_depth,
+            shape=(self.stacked_images, self.image_height, self.image_width),
             dtype=np.float32
         )
         self.cmd_vel_pub = self.create_publisher(Twist, "cmd_vel", 10)
@@ -82,7 +115,7 @@ class DepthNavEnv(ROSGymEnv):
         self.collision_count = 0
         self.evaluate = False
         self.starting_episodes = 0
-        self.timeout_steps = 300
+        self.timeout_steps = timeout_steps
         self.grid_size = 3
 
         self._spin_sensors_callbacks()
@@ -91,7 +124,6 @@ class DepthNavEnv(ROSGymEnv):
 
     def _new_episode(self):
         """Reset the environment for a new episode."""
-        #self.get_logger().info(f"Starting new episode {self.episode}.")
         self.collision_count = 0
 
         stop_twist = Twist()
@@ -102,7 +134,6 @@ class DepthNavEnv(ROSGymEnv):
         # Do not leak frames from the previous episode into the new one
         self.image_buffer = np.zeros_like(self.image_buffer)
 
-        self._reset_simulation()
         self._respawn_robot()
         self._respawn_goal()
         time.sleep(0.25)
@@ -120,7 +151,7 @@ class DepthNavEnv(ROSGymEnv):
                 return True, "collision"
         else:
             self.collision_count = 0
-        
+
         if goal_info[0] < self.goal_tolerance:
             self.goal_count += 1
             self.get_logger().info(f"Goal Reached.")
@@ -131,13 +162,13 @@ class DepthNavEnv(ROSGymEnv):
     def _get_observation(self, sensor_data):
         """Get the current observation."""
         depth_image = sensor_data["depth_image"]
-        
+
         if len(depth_image.shape) == 3 and depth_image.shape[2] == 1:
             depth_image = depth_image.squeeze(2)
-        
+
         self.image_buffer = np.roll(self.image_buffer, shift=1, axis=0)
         self.image_buffer[0] = depth_image
-        
+
         return self.image_buffer
 
     def _render_frame(self):
@@ -145,24 +176,18 @@ class DepthNavEnv(ROSGymEnv):
         return depth_to_rgb(self.image_buffer[0], self.max_depth)
 
     def _get_reward(self, sensor_data):
-        """Calculate the reward based on the event and goal distance.
-        Implements a sparse reward:
-        - Success: 1 - 0.9 * (step_count / max_steps)
-        - Failure or ongoing: 0
-        """
+        """Sparse reward: +100 on goal, -10 on collision, -5 on timeout, 0 otherwise."""
         event = sensor_data["event"]
-        
-        #self.previous_goal_info = sensor_data["goal_info"]
-        
+
         reward = 0.0
-        
+
         if event == "goal":
-            reward = 100#2.0 - 0.9 * (self.episode_step / self.timeout_steps)
+            reward = 100
         elif event == "collision":
-            reward = -10#-0.5
+            reward = -10
         elif event == "timeout":
-            reward = -5# -0.25
-        
+            reward = -5
+
         return reward
 
     def _get_sensor_data(self):
@@ -184,8 +209,6 @@ class DepthNavEnv(ROSGymEnv):
 
         goal_info, _ = process_odom(self.goal_pose, odom)
 
-        #depth_image_normalized = depth_image / self.max_depth
-
         sensor_data_dic = {
             "scan": lidar_measurements,
             "depth_image": depth_image,
@@ -194,20 +217,19 @@ class DepthNavEnv(ROSGymEnv):
         }
 
         return sensor_data_dic
-    
+
     def _log_results(self):
         self.get_logger().debug(f"Goals reached: {self.goal_count}")
 
-    
     def _reset_simulation(self):
         """Reset the Gazebo simulation."""
         req = Empty.Request()
         while not self.reset_world_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().warn("Service not available, waiting again...")
-        
+
         future = self.reset_world_client.call_async(req)
         rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
-        time.sleep(0.1)  
+        time.sleep(0.1)
 
     def _sample_position(self):
         """Sample an (x, y) position in a random quadrant, at least 1 m away from both axes."""
@@ -230,19 +252,22 @@ class DepthNavEnv(ROSGymEnv):
         x, y = self._sample_position()
         yaw = self.np_random.uniform(0, 2 * math.pi)
 
-        if self._set_entity_state(self.robot_name, x, y, z=0.1, yaw=yaw):
+        if self._set_entity_state(self.robot_name, x, y, z=0.05, yaw=yaw):
             return True
         return self._reset_simulation()
 
     def _send_action(self, action):
-
+        """Publish the action as a velocity command."""
         twist = Twist()
-        linear_x = float(action[0])
-        if linear_x < self.MIN_LINEAR_VELOCITY:
-            linear_x = self.MIN_LINEAR_VELOCITY  
-        
+
+        if self.action_type == "discrete":
+            linear_x, angular_z = self.actions[action]
+        else:
+            linear_x = max(float(action[0]), self.MIN_LINEAR_VELOCITY)
+            angular_z = float(action[1])
+
         twist.linear.x = linear_x
-        twist.angular.z = float(action[1])
+        twist.angular.z = angular_z
 
         self.cmd_vel_pub.publish(twist)
 
@@ -251,7 +276,6 @@ class DepthNavEnv(ROSGymEnv):
         data_path = os.path.join(
             get_package_share_directory(self.package_name),
             "goals_and_poses",
-            #self.mode,
             self.data_path,
         )
         with open(data_path, "r") as file:

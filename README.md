@@ -108,45 +108,48 @@ Environment parameters can be configured in the YAML files located in the `confi
 - `main_params.yaml`: Main parameters for the environments.
 - `training_params.yaml`: Parameters specific to training algorithms.
 
-## Testing
-
-`test/test_gymnasium_api.py` runs Gymnasium's `check_env` on every registered environment and also checks that a timeout is reported as `truncated`, that `reset(seed=...)` is reproducible, and that the frame stack is cleared on reset. It replaces the simulator with deterministic fakes, so Gazebo does not need to be running:
-
-```bash
-colcon test --packages-select rosgym --event-handlers console_direct+
-```
-
 ## Work in Progress
 
 - **Multi-robot training** (`launch/multi_robot_training.launch.py`, `rosgym/multi_robot_sensors.py`, `scripts/multi_agent_training`): the environment class `MultiRobotNavEnv` is not included yet, so this pipeline is not registered or installed.
 
+## Environments
+
+| ID | Class | Actions | Reward |
+|----|-------|---------|--------|
+| `SparseNavEnvDiscrete-v0` | `SparseNavEnv(action_type="discrete")` | 10 fixed velocity commands | Sparse |
+| `SparseNavEnv-v0` | `SparseNavEnv(action_type="continuous")` | [linear, angular] velocity | Sparse |
+| `DenseNavEnv-v0` | `DenseNavEnv` | [linear, angular] velocity | Dense (distance and heading) |
+
+All environments observe a stack of depth images and are registered by `rosgym.register_env.register_envs()`.
+
 ## Project Structure
 
 ```
-rosgym/
+ROS-Gymnasium/
 ├── CMakeLists.txt
 ├── package.xml
 ├── config/
-│   ├── main_params.yaml
-│   └── training_params.yaml
-├── goals_and_poses/
-│   ├── training/
-│   └── testing/
+│   ├── main_params.yaml          # Robot, sensor and world parameters
+│   └── training_params.yaml      # SB3 algorithm and hyperparameters
+├── goals_and_poses/training/     # Goal and spawn poses per world
 ├── launch/
-│   └── starter.launch.py
+│   ├── training.launch.py
+│   └── multi_robot_training.launch.py   # Work in progress
+├── models/goal_box/
+├── worlds/
 ├── rosgym/
-│   ├── __init__.py
+│   ├── ros_gym_env.py            # ROSGymEnv base class
 │   ├── register_env.py
 │   ├── sensors.py
-│   ├── ros_gym_env.py
-│   ├── tasks/
-│   │   └── goToPose/
-│   │       └── nav_depth.py
-│   └── utils/
-│       ├── env_utils.py
-│       └── launch_utils.py
-└── scripts/
-    └── go_to_pose_camera
+│   ├── multi_robot_sensors.py    # Work in progress
+│   ├── tasks/goToPose/
+│   │   ├── sparse_nav.py         # SparseNavEnv
+│   │   └── dense_nav.py          # DenseNavEnv
+│   └── utils/env_utils.py
+├── scripts/
+│   └── go_to_pose_camera         # SB3 training entry point
+└── test/
+    └── test_gymnasium_api.py
 ```
 
 ## Citation

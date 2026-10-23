@@ -15,12 +15,13 @@ from gymnasium.utils.env_checker import check_env
 
 from rosgym.ros_gym_env import ROSGymEnv
 from rosgym.sensors import Sensors
-from rosgym.tasks.goToPose import nav_depth, sparse_nav, sparse_nav_discrete
+from rosgym.tasks.goToPose.dense_nav import DenseNavEnv
+from rosgym.tasks.goToPose.sparse_nav import SparseNavEnv
 
-ENV_CLASSES = {
-    "SparseNavEnvDiscrete": sparse_nav_discrete.DepthNavEnv,
-    "SparseNavEnv": sparse_nav.DepthNavEnv,
-    "DepthNavEnv": nav_depth.DepthNavEnv,
+ENVS = {
+    "SparseNavEnvDiscrete": (SparseNavEnv, {"action_type": "discrete"}),
+    "SparseNavEnv": (SparseNavEnv, {"action_type": "continuous"}),
+    "DenseNavEnv": (DenseNavEnv, {}),
 }
 
 CAMERA_DEPTH = 1.5  # [m], fake camera depth
@@ -56,10 +57,10 @@ def teleports():
     return []
 
 
-@pytest.fixture(params=list(ENV_CLASSES), ids=list(ENV_CLASSES))
+@pytest.fixture(params=list(ENVS), ids=list(ENVS))
 def env(request, ros_context, monkeypatch, tmp_path, teleports):
     """Environment instance with the simulator replaced by fakes."""
-    env_cls = ENV_CLASSES[request.param]
+    env_cls, env_kwargs = ENVS[request.param]
 
     def set_entity_state(self, name, x, y, z=0.05, yaw=0.0):
         teleports.append((name, x, y, yaw))
@@ -77,14 +78,14 @@ def env(request, ros_context, monkeypatch, tmp_path, teleports):
     monkeypatch.setattr(ROSGymEnv, "_set_entity_state", set_entity_state)
     monkeypatch.setattr(ROSGymEnv, "_create_logdir", lambda self: str(tmp_path))
     monkeypatch.setattr(env_cls, "_reset_simulation", lambda self: None)
-    if env_cls is nav_depth.DepthNavEnv:
+    if env_cls is DenseNavEnv:
         monkeypatch.setattr(env_cls, "_respawn_robot", lambda self: None)
     monkeypatch.setattr(Sensors, "get_depth", camera_depth)
     monkeypatch.setattr(Sensors, "get_laser", laser)
     monkeypatch.setattr(Sensors, "get_odom", lambda self, vel=False: [0.0, 0.0, 0.0])
     monkeypatch.setattr("time.sleep", lambda seconds: None)
 
-    environment = env_cls()
+    environment = env_cls(**env_kwargs)
     yield environment
     environment.destroy_node()
 
