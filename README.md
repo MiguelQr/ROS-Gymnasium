@@ -164,6 +164,12 @@ ROS-Gymnasium/
     └── test_gymnasium_api.py
 ```
 
+## License
+
+Released under the [MIT License](LICENSE).
+
+Parts of the sensor handling and simulation setup are adapted from [PIC4rl_gym](https://github.com/PIC4SeR/PIC4rl_gym) (Martini et al., see Citation). `research/base_reward.py` is from [RLeXplore](https://github.com/RLE-Foundation/RLeXplore) and keeps its MIT License header.
+
 ## Citation
 
 ```bibtex
