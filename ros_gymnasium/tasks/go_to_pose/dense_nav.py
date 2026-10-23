@@ -81,12 +81,9 @@ class DenseNavEnv(ROSGymnasiumEnv):
         # Initialize environment
         self.initial_pose, self.goals, self.poses = self._load_goals_and_poses()
         self.goal_pose = self.goals[0]
-        self.previous_twist = Twist()
         self.previous_goal_info = None
-        self.t0 = 0.0
         self.goal_count = 0
         self.collision_count = 0
-        self.evaluate = False
         self.starting_episodes = 0
         self.timeout_steps = 500
 

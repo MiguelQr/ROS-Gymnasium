@@ -17,7 +17,6 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from ament_index_python.packages import get_package_share_directory
-from nav2_common.launch import RewrittenYaml
 
 def camel_to_snake(s):
     """Convert CamelCase to snake_case."""

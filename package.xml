@@ -2,16 +2,33 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>ros_gymnasium</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <version>1.0.0</version>
+  <description>Gymnasium environments for reinforcement learning of robot navigation in Gazebo through ROS 2.</description>
   <maintainer email="miguel.aqr99@gmail.com">Miguel Quiñones</maintainer>
   <license>TODO: License declaration</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>ament_cmake_python</buildtool_depend>
 
+  <!-- ROS interfaces used by the environments -->
   <depend>rclpy</depend>
+  <depend>std_srvs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend>
   <depend>gazebo_msgs</depend>
+
+  <!-- Runtime: simulation, launch and Python libraries -->
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>gazebo_ros</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <!-- gymnasium and stable-baselines3 are installed with pip (see README) -->
+
   <test_depend>ament_cmake_pytest</test_depend>
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
@@ -20,6 +37,5 @@
 
   <export>
     <build_type>ament_cmake</build_type>
-    <!-- <build_type>ament_python</build_type> -->
   </export>
 </package>

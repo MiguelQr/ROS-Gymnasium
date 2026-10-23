@@ -3,7 +3,7 @@
 """
 WORK IN PROGRESS: multi-robot training.
 
-This script depends on ``ros_gymnasium.tasks.goToPose.multi_nav_discrete.MultiRobotNavEnv``,
+This script depends on ``ros_gymnasium.tasks.go_to_pose.multi_nav_discrete.MultiRobotNavEnv``,
 which is not part of the package yet, so it is not installed and will not run.
 """
 
@@ -18,7 +18,7 @@ SEED = 10
 
 register_envs()
 
-from ros_gymnasium.tasks.goToPose.multi_nav_discrete import MultiRobotNavEnv
+from ros_gymnasium.tasks.go_to_pose.multi_nav_discrete import MultiRobotNavEnv
 
 def make_env(robot_idx, node, num_robots):
     """Simple environment factory function"""

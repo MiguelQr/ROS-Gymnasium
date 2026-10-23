@@ -18,9 +18,6 @@ from ros_gymnasium.sensors import Sensors
 from ros_gymnasium.utils.env_utils import create_logdir
 import gymnasium as gym
 
-def _param(self, name: str, type_: str):
-    return getattr(self.get_parameter(name).get_parameter_value(), type_)
-
 class ROSGymnasiumEnv(Node, gym.Env, ABC):
     metadata = {"render_modes": ["rgb_array"], "render_fps": 15}
 
@@ -33,7 +30,6 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
                 ("package_name", rclpy.Parameter.Type.STRING),
                 ("training_params_path", rclpy.Parameter.Type.STRING),
                 ("main_params_path", rclpy.Parameter.Type.STRING),
-                ("world_name", rclpy.Parameter.Type.STRING),
                 ("robot_name", rclpy.Parameter.Type.STRING),
                 ("sensor", rclpy.Parameter.Type.STRING),
             ],
@@ -51,10 +47,8 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
 
         
         self.package_name = self._param("package_name", "string_value")
-        self.world_name = self._param("world_name", "string_value")
         self.robot_name = self._param("robot_name", "string_value")
         self.sensor_type = self._param("sensor", "string_value")
-        self.evaluate = False
 
         # ROS 2 setup
         self.reset_world_client = self.create_client(Empty, "reset_world")
@@ -93,17 +87,18 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        self.total_steps += self.episode_step
+        previous_episode_steps = self.episode_step
+        self.total_steps += previous_episode_steps
         self.episode += 1
         self.episode_step = 0
 
         elapsed_time = str(timedelta(seconds=int(time.time() - self.start_time)))
         self.get_logger().info(
-            f"[Episode {self.episode} {'(eval)' if self.evaluate else ''}] Total steps: {self.total_steps}, "
-            f"Training time: {elapsed_time}"
+            f"[Episode {self.episode}] Total steps: {self.total_steps}, Training time: {elapsed_time}"
         )
         logging.info(
-            f"Total_episodes: {self.episode}, Total_steps: {self.total_steps}, episode_steps: {self.episode_step + 1}\n"
+            f"Total_episodes: {self.episode}, Total_steps: {self.total_steps}, "
+            f"previous_episode_steps: {previous_episode_steps}"
         )
 
         self._new_episode()
@@ -121,9 +116,10 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
         return None
 
     def close(self):
+        """Release the environment's ROS node. Shutting down rclpy is left to the caller."""
         self.get_logger().info("Closing environment...")
         self._log_results()
-        rclpy.shutdown()
+        self.destroy_node()
 
     def _create_logdir(self):
         log_path = os.path.join(

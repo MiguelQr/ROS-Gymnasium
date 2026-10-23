@@ -8,13 +8,12 @@ import re
 import random
 import math
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, OpaqueFunction, TimerAction, DeclareLaunchArgument
+from launch.actions import IncludeLaunchDescription, OpaqueFunction, TimerAction, DeclareLaunchArgument, RegisterEventHandler
+from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from launch_ros.substitutions import FindPackageShare
 from ament_index_python.packages import get_package_share_directory
-from nav2_common.launch import RewrittenYaml
 
 TRAINING_EXECUTABLES = ["go_to_pose_camera"]  # Installed by CMakeLists.txt
 
@@ -78,7 +77,7 @@ def prepare_launch(context, *args, **kwargs):
     
     # Prepare world, robot and goal paths
     world_path = os.path.join(
-        get_package_share_directory(pkg_name),  # Keep reference to gazebo_sim for now
+        get_package_share_directory(pkg_name),
         'worlds', 
         config_params["world_name"]
     )
@@ -123,7 +122,8 @@ def prepare_launch(context, *args, **kwargs):
             '-y', str(robot_pose[1]), 
             '-z', str(config_params['robot_spawn_z']),
             '-Y', str(robot_pose[2]),
-            '-topic', '/robot_description'
+            '-topic', '/robot_description',
+            '-timeout', '120'
         ],
     )
     actions.append(spawn_robot)
@@ -141,7 +141,6 @@ def prepare_launch(context, *args, **kwargs):
             '-z', str(config_params['goal_spawn_z'])
         ]
     )
-    actions.append(spawn_goal)
     
     # Add Gazebo 
     gazebo = launch.actions.ExecuteProcess(
@@ -163,7 +162,6 @@ def prepare_launch(context, *args, **kwargs):
         output="screen",
         emulate_tty=True,
         parameters=[
-            # Pass the actual dictionary instead of RewrittenYaml
             configured_params,
             {"package_name": pkg_name},
             {"main_params_path": main_params_path},
@@ -171,7 +169,9 @@ def prepare_launch(context, *args, **kwargs):
             {"use_sim_time": use_sim_time}
         ],
     )
-    actions.append(TimerAction(period=50.0, actions=[ros_gymnasium_node]))
+    # Spawn the goal once the robot is in Gazebo, then start training once both are spawned
+    actions.append(RegisterEventHandler(OnProcessExit(target_action=spawn_robot, on_exit=[spawn_goal])))
+    actions.append(RegisterEventHandler(OnProcessExit(target_action=spawn_goal, on_exit=[ros_gymnasium_node])))
     
     return actions
 

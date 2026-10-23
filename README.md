@@ -90,7 +90,7 @@ tensorboard --logdir results
 
 ## Creating Environments
 
-Environments can be createdby extending the `ROSGymnasiumEnv` base class:
+Environments can be created by extending the `ROSGymnasiumEnv` base class:
 
 ```python
 from ros_gymnasium.ros_gymnasium_env import ROSGymnasiumEnv
@@ -153,12 +153,13 @@ ROS-Gymnasium/
 │   ├── register_env.py
 │   ├── sensors.py
 │   ├── multi_robot_sensors.py    # Work in progress
-│   ├── tasks/goToPose/
+│   ├── tasks/go_to_pose/
 │   │   ├── sparse_nav.py         # SparseNavEnv
 │   │   └── dense_nav.py          # DenseNavEnv
 │   └── utils/env_utils.py
 ├── scripts/
 │   └── go_to_pose_camera         # SB3 training entry point
+├── research/                     # Adaptive RND exploration experiments (not installed)
 └── test/
     └── test_gymnasium_api.py
 ```

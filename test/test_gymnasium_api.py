@@ -15,8 +15,8 @@ from gymnasium.utils.env_checker import check_env
 
 from ros_gymnasium.ros_gymnasium_env import ROSGymnasiumEnv
 from ros_gymnasium.sensors import Sensors
-from ros_gymnasium.tasks.goToPose.dense_nav import DenseNavEnv
-from ros_gymnasium.tasks.goToPose.sparse_nav import SparseNavEnv
+from ros_gymnasium.tasks.go_to_pose.dense_nav import DenseNavEnv
+from ros_gymnasium.tasks.go_to_pose.sparse_nav import SparseNavEnv
 
 ENVS = {
     "SparseNavEnvDiscrete": (SparseNavEnv, {"action_type": "discrete"}),
@@ -85,7 +85,7 @@ def env(request, ros_context, monkeypatch, tmp_path, teleports):
 
     environment = env_cls(**env_kwargs)
     yield environment
-    environment.destroy_node()
+    environment.close()
 
 
 def test_check_env(env):
