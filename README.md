@@ -1,4 +1,4 @@
-# ROS-Gym
+# ROS-Gymnasium
 
 ![ROS 2](https://img.shields.io/badge/ROS%202-Foxy%20%7C%20Humble-blue) ![Gymnasium](https://img.shields.io/badge/Gymnasium-Latest-green) ![Gazebo](https://img.shields.io/badge/Gazebo-11-orange)
 
@@ -6,7 +6,7 @@ A framework for reinforcement learning in robotics that connects Gymnasium envir
 
 ## Overview
 
-ROS-Gym provides an interface for connecting the Gymnasium (formerly OpenAI Gym) reinforcement learning library, with the Gazebo physics simulator. This bridge allows reinforcement learning agents to be trained in simulated robotic environments.
+ROS-Gymnasium provides an interface for connecting the Gymnasium (formerly OpenAI Gym) reinforcement learning library, with the Gazebo physics simulator. This bridge allows reinforcement learning agents to be trained in simulated robotic environments.
 
 ## Features
 
@@ -61,12 +61,12 @@ ROS-Gym provides an interface for connecting the Gymnasium (formerly OpenAI Gym)
 
 Train in the default world (`gridworld_4x4.world` from `config/main_params.yaml`):
 ```bash
-ros2 launch rosgym training.launch.py
+ros2 launch ros_gymnasium training.launch.py
 ```
 
 Train in a larger world:
 ```bash
-ros2 launch rosgym training.launch.py world_name:=gridworld_8x8.world
+ros2 launch ros_gymnasium training.launch.py world_name:=gridworld_8x8.world
 ```
 
 Available worlds: `gridworld_4x4.world`, `gridworld_6x6.world`, `gridworld_8x8.world`, `tesis_avoidance.world`, `tesis_circuit.world`, `tesis_obstacle.world`.
@@ -85,17 +85,17 @@ tensorboard --logdir results
 | task | `task` in `main_params.yaml` | Task type; only `goToPose` is implemented |
 | main_params | `config/main_params.yaml` | Robot, sensor and world parameters |
 | training_params | `config/training_params.yaml` | Training algorithm and hyperparameters |
-| pkg_name | rosgym | Package name |
+| pkg_name | ros_gymnasium | Package name |
 | use_sim_time | true | Use simulation clock |
 
 ## Creating Environments
 
-Environments can be createdby extending the `ROSGymEnv` base class:
+Environments can be createdby extending the `ROSGymnasiumEnv` base class:
 
 ```python
-from rosgym.ros_gym_env import ROSGymEnv
+from ros_gymnasium.ros_gymnasium_env import ROSGymnasiumEnv
 
-class CustomEnv(ROSGymEnv):
+class CustomEnv(ROSGymnasiumEnv):
     def __init__(self):
         super().__init__("my_custom_env")
         # Your initialization code
@@ -121,7 +121,7 @@ Environment parameters can be configured in the YAML files located in the `confi
 
 ## Work in Progress
 
-- **Multi-robot training** (`launch/multi_robot_training.launch.py`, `rosgym/multi_robot_sensors.py`, `scripts/multi_agent_training`): the environment class `MultiRobotNavEnv` is not included yet, so this pipeline is not registered or installed.
+- **Multi-robot training** (`launch/multi_robot_training.launch.py`, `ros_gymnasium/multi_robot_sensors.py`, `scripts/multi_agent_training`): the environment class `MultiRobotNavEnv` is not included yet, so this pipeline is not registered or installed.
 
 ## Environments
 
@@ -131,7 +131,7 @@ Environment parameters can be configured in the YAML files located in the `confi
 | `SparseNavEnv-v0` | `SparseNavEnv(action_type="continuous")` | [linear, angular] velocity | Sparse |
 | `DenseNavEnv-v0` | `DenseNavEnv` | [linear, angular] velocity | Dense (distance and heading) |
 
-All environments observe a stack of depth images and are registered by `rosgym.register_env.register_envs()`.
+All environments observe a stack of depth images and are registered by `ros_gymnasium.register_env.register_envs()`.
 
 ## Project Structure
 
@@ -148,8 +148,8 @@ ROS-Gymnasium/
 │   └── multi_robot_training.launch.py   # Work in progress
 ├── models/goal_box/
 ├── worlds/
-├── rosgym/
-│   ├── ros_gym_env.py            # ROSGymEnv base class
+├── ros_gymnasium/
+│   ├── ros_gymnasium_env.py            # ROSGymnasiumEnv base class
 │   ├── register_env.py
 │   ├── sensors.py
 │   ├── multi_robot_sensors.py    # Work in progress
@@ -166,9 +166,9 @@ ROS-Gymnasium/
 ## Citation
 
 ```bibtex
-@misc{rosgym2025,
+@misc{ros_gymnasium2025,
   author = {Miguel Quiñones},
-  title = {ROS-Gym},
+  title = {ROS-Gymnasium},
   year = {2025},
   publisher = {GitHub},
   howpublished = {\url{https://github.com/MiguelQr/ROS-Gymnasium}}

@@ -16,8 +16,8 @@ from sensor_msgs.msg import Image, Imu
 
 from cv_bridge import CvBridge
 
-from rosgym.utils.env_utils import quat_to_euler, tf_decompose, euler_from_quaternion
-from rosgym.sensors import LaserScanSensor, ImuSensor, OdomSensor, DepthCamera, RGBCamera
+from ros_gymnasium.utils.env_utils import quat_to_euler, tf_decompose, euler_from_quaternion
+from ros_gymnasium.sensors import LaserScanSensor, ImuSensor, OdomSensor, DepthCamera, RGBCamera
 
 import yaml
 

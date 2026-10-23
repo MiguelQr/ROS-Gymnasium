@@ -100,7 +100,7 @@ def prepare_launch(context, *args, **kwargs):
     # Get the final world name from config_params (either from file or overridden)
     world_name = config_params["world_name"]
     
-    # Set up for rosgym node
+    # Set up for ros_gymnasium node
     sensor_name = config_params["sensor"]
     task_name = config_params["task"]
     executable_name = "multi_agent_training"  # Use our multi-agent training script
@@ -299,13 +299,13 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "pkg_name", 
-            default_value="rosgym", 
+            default_value="ros_gymnasium", 
             description="Package name"
         ),
         DeclareLaunchArgument(
             "main_params", 
             default_value=os.path.join(
-                get_package_share_directory("rosgym"), 
+                get_package_share_directory("ros_gymnasium"), 
                 "config", 
                 "main_params.yaml"
             ),
@@ -314,7 +314,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "training_params", 
             default_value=os.path.join(
-                get_package_share_directory("rosgym"), 
+                get_package_share_directory("ros_gymnasium"), 
                 "config", 
                 "training_params.yaml"
             ),

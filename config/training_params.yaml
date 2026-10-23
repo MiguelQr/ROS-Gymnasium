@@ -1,6 +1,6 @@
 training_params:
   # Stable-Baselines3 training setup, read by scripts/go_to_pose_camera
-  env_id: "SparseNavEnvDiscrete-v0" # Registered Gymnasium environment (see rosgym/register_env.py)
+  env_id: "SparseNavEnvDiscrete-v0" # Registered Gymnasium environment (see ros_gymnasium/register_env.py)
   algorithm: "PPO" # PPO or A2C
   policy: "CnnPolicy"
   total_timesteps: 1000000

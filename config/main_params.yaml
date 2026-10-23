@@ -1,6 +1,6 @@
 main_node:
   ros__parameters:
-    package_name: "rosgym"
+    package_name: "ros_gymnasium"
     # Robot parameters
     robot_name: "tb2_ugv" # robot entity name in gazebo
     robot_type: "circular" # rectangular or circular
@@ -15,6 +15,19 @@ main_node:
 
     # Task parameters
     task: 'goToPose'
+    grid_size: 3.0 # [m], robot and goal spawn in a random quadrant, between 1 m and grid_size from both axes
+    robot_spawn_z: 0.05 # [m], robot spawn height
+    goal_spawn_z: 0.05 # [m], goal spawn height
+    sparse_reward: # SparseNavEnv
+      goal: 100.0
+      collision: -10.0
+      timeout: -5.0
+    dense_reward: # DenseNavEnv
+      progress_scale: 30.0 # per metre moved towards the goal
+      heading_scale: 0.6 # weight of the heading-to-goal term
+      collision_step: -10.0 # every step in contact with an obstacle
+      goal: 1000.0
+      collision: -200.0
     
     # Sensors parameters
     sensor: 'camera' # Only camera is implemented

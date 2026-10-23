@@ -1,7 +1,7 @@
 """
-Gymnasium API conformance tests for the ROS-Gym environments.
+Gymnasium API conformance tests for the ROS-Gymnasium environments.
 
-Run: colcon test --packages-select rosgym
+Run: colcon test --packages-select ros_gymnasium
 """
 
 import os
@@ -13,10 +13,10 @@ import yaml
 from ament_index_python.packages import get_package_share_directory
 from gymnasium.utils.env_checker import check_env
 
-from rosgym.ros_gym_env import ROSGymEnv
-from rosgym.sensors import Sensors
-from rosgym.tasks.goToPose.dense_nav import DenseNavEnv
-from rosgym.tasks.goToPose.sparse_nav import SparseNavEnv
+from ros_gymnasium.ros_gymnasium_env import ROSGymnasiumEnv
+from ros_gymnasium.sensors import Sensors
+from ros_gymnasium.tasks.goToPose.dense_nav import DenseNavEnv
+from ros_gymnasium.tasks.goToPose.sparse_nav import SparseNavEnv
 
 ENVS = {
     "SparseNavEnvDiscrete": (SparseNavEnv, {"action_type": "discrete"}),
@@ -30,14 +30,14 @@ CAMERA_DEPTH = 1.5  # [m], fake camera depth
 @pytest.fixture(scope="module")
 def ros_context(tmp_path_factory):
     """Initialise rclpy with the package's default parameters."""
-    share = get_package_share_directory("rosgym")
+    share = get_package_share_directory("ros_gymnasium")
     main_params = os.path.join(share, "config", "main_params.yaml")
     training_params = os.path.join(share, "config", "training_params.yaml")
 
     with open(main_params, "r") as file:
         params = yaml.safe_load(file)["main_node"]["ros__parameters"]
     params.update(
-        package_name="rosgym",
+        package_name="ros_gymnasium",
         main_params_path=main_params,
         training_params_path=training_params,
     )
@@ -74,9 +74,9 @@ def env(request, ros_context, monkeypatch, tmp_path, teleports):
         p = self.laser_process
         return np.full(p.num_points, p.max_dist), False
 
-    monkeypatch.setattr(ROSGymEnv, "_spin_sensors_callbacks", lambda self, max_attempts=100: None)
-    monkeypatch.setattr(ROSGymEnv, "_set_entity_state", set_entity_state)
-    monkeypatch.setattr(ROSGymEnv, "_create_logdir", lambda self: str(tmp_path))
+    monkeypatch.setattr(ROSGymnasiumEnv, "_spin_sensors_callbacks", lambda self, max_attempts=100: None)
+    monkeypatch.setattr(ROSGymnasiumEnv, "_set_entity_state", set_entity_state)
+    monkeypatch.setattr(ROSGymnasiumEnv, "_create_logdir", lambda self: str(tmp_path))
     monkeypatch.setattr(env_cls, "_reset_simulation", lambda self: None)
     monkeypatch.setattr(Sensors, "get_depth", camera_depth)
     monkeypatch.setattr(Sensors, "get_laser", laser)

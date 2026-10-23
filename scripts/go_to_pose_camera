@@ -7,16 +7,16 @@ import yaml
 from ament_index_python.packages import get_package_share_directory
 from stable_baselines3 import A2C, PPO
 from stable_baselines3.common.env_util import make_vec_env
-from rosgym.register_env import register_envs
+from ros_gymnasium.register_env import register_envs
 
 ALGORITHMS = {"PPO": PPO, "A2C": A2C}
 
 
 def load_training_params():
     """Load training_params.yaml from the path given by the launch file, or the installed default."""
-    default_path = os.path.join(get_package_share_directory("rosgym"), "config", "training_params.yaml")
+    default_path = os.path.join(get_package_share_directory("ros_gymnasium"), "config", "training_params.yaml")
 
-    node = rclpy.create_node("rosgym_trainer")
+    node = rclpy.create_node("ros_gymnasium_trainer")
     path = node.declare_parameter("training_params_path", default_path).value
     node.destroy_node()
 

@@ -6,6 +6,7 @@ import json
 import launch
 import re
 import random
+import math
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription, OpaqueFunction, TimerAction, DeclareLaunchArgument
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -22,26 +23,11 @@ def camel_to_snake(s):
     s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', s)
     return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
 
-def generate_random_position():
-    """Generate a random position in one of the four quadrants."""
-    quadrant = random.randint(1, 4)
-    
-    if quadrant == 1:  # Bottom-left quadrant
-        x = random.uniform(-3, -1)
-        y = random.uniform(-3, -1)
-    elif quadrant == 2:  # Top-right quadrant
-        x = random.uniform(1, 3)
-        y = random.uniform(1, 3)
-    elif quadrant == 3:  # Top-left quadrant
-        x = random.uniform(-3, -1)
-        y = random.uniform(1, 3)
-    else:  # Bottom-right quadrant
-        x = random.uniform(1, 3)
-        y = random.uniform(-3, -1)
-    
-    # Random orientation (yaw)
-    yaw = random.uniform(0, 6.28)
-    
+def generate_random_position(grid_size):
+    """Random [x, y, yaw] in one of the four quadrants, between 1 m and grid_size from both axes."""
+    x = random.choice([-1.0, 1.0]) * random.uniform(1, grid_size)
+    y = random.choice([-1.0, 1.0]) * random.uniform(1, grid_size)
+    yaw = random.uniform(0, 2 * math.pi)
     return [x, y, yaw]
 
 def prepare_launch(context, *args, **kwargs):
@@ -67,7 +53,7 @@ def prepare_launch(context, *args, **kwargs):
     world_name = config_params["world_name"]
     
 
-    # Set up for rosgym node
+    # Set up for ros_gymnasium node
     sensor_name = config_params["sensor"]
     task_name = config_params["task"]
     executable_name = camel_to_snake(task_name) + "_" + camel_to_snake(sensor_name)
@@ -87,7 +73,7 @@ def prepare_launch(context, *args, **kwargs):
         goal_and_poses = json.load(file)
     
     #robot_pose = goal_and_poses["initial_pose"]
-    robot_pose = generate_random_position()
+    robot_pose = generate_random_position(config_params["grid_size"])
     goal_pose = goal_and_poses["goals"][0]
     
     # Prepare world, robot and goal paths
@@ -135,7 +121,7 @@ def prepare_launch(context, *args, **kwargs):
             '-entity', config_params["robot_name"], 
             '-x', str(robot_pose[0]),
             '-y', str(robot_pose[1]), 
-            '-z', '0.05',
+            '-z', str(config_params['robot_spawn_z']),
             '-Y', str(robot_pose[2]),
             '-topic', '/robot_description'
         ],
@@ -152,7 +138,7 @@ def prepare_launch(context, *args, **kwargs):
             '-file', goal_entity, 
             '-x', str(goal_pose[0]),
             '-y', str(goal_pose[1]), 
-            '-z', '0.05'
+            '-z', str(config_params['goal_spawn_z'])
         ]
     )
     actions.append(spawn_goal)
@@ -169,11 +155,11 @@ def prepare_launch(context, *args, **kwargs):
 
     actions.append(TimerAction(period=5.0, actions=[gazebo]))
     
-    # Add rosgym node
-    rosgym_node = Node(
+    # Add ros_gymnasium node
+    ros_gymnasium_node = Node(
         package=pkg_name,
         executable=executable_name,
-        name="rosgym_node",
+        name="ros_gymnasium_node",
         output="screen",
         emulate_tty=True,
         parameters=[
@@ -185,7 +171,7 @@ def prepare_launch(context, *args, **kwargs):
             {"use_sim_time": use_sim_time}
         ],
     )
-    actions.append(TimerAction(period=50.0, actions=[rosgym_node]))
+    actions.append(TimerAction(period=50.0, actions=[ros_gymnasium_node]))
     
     return actions
 
@@ -204,13 +190,13 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "pkg_name", 
-            default_value="rosgym", 
+            default_value="ros_gymnasium", 
             description="Package name"
         ),
         DeclareLaunchArgument(
             "main_params", 
             default_value=os.path.join(
-                get_package_share_directory("rosgym"), 
+                get_package_share_directory("ros_gymnasium"), 
                 "config", 
                 "main_params.yaml"
             ),
@@ -219,7 +205,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "training_params", 
             default_value=os.path.join(
-                get_package_share_directory("rosgym"), 
+                get_package_share_directory("ros_gymnasium"), 
                 "config", 
                 "training_params.yaml"
             ),

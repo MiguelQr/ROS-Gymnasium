@@ -14,14 +14,14 @@ from std_srvs.srv import Empty
 from gazebo_msgs.srv import SetEntityState
 from ament_index_python.packages import get_package_share_directory
 
-from rosgym.sensors import Sensors
-from rosgym.utils.env_utils import create_logdir
+from ros_gymnasium.sensors import Sensors
+from ros_gymnasium.utils.env_utils import create_logdir
 import gymnasium as gym
 
 def _param(self, name: str, type_: str):
     return getattr(self.get_parameter(name).get_parameter_value(), type_)
 
-class ROSGymEnv(Node, gym.Env, ABC):
+class ROSGymnasiumEnv(Node, gym.Env, ABC):
     metadata = {"render_modes": ["rgb_array"], "render_fps": 15}
 
     def __init__(self, node_name: str = "rl_base_env"):
