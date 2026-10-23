@@ -1,3 +1,5 @@
+# WORK IN PROGRESS: per-robot (namespaced) sensors for multi-robot training.
+
 import os
 import time
 import math

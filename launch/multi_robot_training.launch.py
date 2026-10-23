@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+# WORK IN PROGRESS: multi-robot training. Spawns the robots, but the
+# multi_agent_training executable it starts is not installed yet because
+# MultiRobotNavEnv is not part of the package (see README).
+
 import os
 import yaml
 import json

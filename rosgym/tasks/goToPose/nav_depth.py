@@ -3,7 +3,6 @@
 import os
 import numpy as np
 import math
-import random
 import time
 import json
 
@@ -96,11 +95,16 @@ class DepthNavEnv(ROSGymEnv):
         """Reset the environment for a new episode."""
         self.get_logger().info(f"Starting new episode {self.episode}.")
         self.collision_count = 0
+        # Progress reward must not compare against the previous episode's goal
+        self.previous_goal_info = None
 
         stop_twist = Twist()
         stop_twist.linear.x = 0.0
         stop_twist.angular.z = 0.0
         self.cmd_vel_pub.publish(stop_twist)
+
+        # Do not leak frames from the previous episode into the new one
+        self.image_buffer = np.zeros_like(self.image_buffer)
 
         self._reset_simulation()
         self._respawn_robot()
@@ -108,7 +112,7 @@ class DepthNavEnv(ROSGymEnv):
         time.sleep(0.25)
 
     def _check_events(self, sensor_data):
-        """Check for termination events (collision, goal, timeout)."""
+        """Check for termination events (collision, goal). Timeouts are handled as truncation by the base class."""
         collision = sensor_data["collision"]
         goal_info = sensor_data["goal_info"]
 
@@ -124,9 +128,7 @@ class DepthNavEnv(ROSGymEnv):
         if goal_info[0] < self.goal_tolerance:
             self.goal_count += 1
             return True, "goal"
-        elif self.episode_step >= self.timeout_steps:
-            return True, "timeout"
-        
+
         return False, "none"
 
     def _get_observation(self, sensor_data):
@@ -194,7 +196,10 @@ class DepthNavEnv(ROSGymEnv):
         }
 
         return sensor_data_dic
-    
+
+    def _log_results(self):
+        self.get_logger().debug(f"Goals reached: {self.goal_count}")
+
     def _reset_simulation(self):
         """Reset the Gazebo simulation."""
         req = Empty.Request()
@@ -208,11 +213,11 @@ class DepthNavEnv(ROSGymEnv):
     def _respawn_goal(self):
         """Respawn the goal in a new position."""
         if self.episode <= self.starting_episodes:
-            x = random.uniform(-2.9, 2.9) + self.initial_pose[0]
-            y = random.uniform(-2.9, 2.9) + self.initial_pose[1]
+            x = self.np_random.uniform(-2.9, 2.9) + self.initial_pose[0]
+            y = self.np_random.uniform(-2.9, 2.9) + self.initial_pose[1]
             self.goal_pose = [x, y]
         else:
-            index = random.randint(0, len(self.goals) - 1)
+            index = self.np_random.integers(len(self.goals))
             self.goal_pose = self.goals[index]
 
         self.get_logger().info(f"New goal pose: {self.goal_pose}")
@@ -222,7 +227,7 @@ class DepthNavEnv(ROSGymEnv):
         if self.episode <= self.starting_episodes:
             x, y, yaw = self.initial_pose
         else:
-            index = random.randint(0, len(self.poses) - 1)
+            index = self.np_random.integers(len(self.poses))
             x, y, yaw = self.poses[index]
 
         qz = np.sin(yaw / 2)

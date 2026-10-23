@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import math
 import yaml
 import logging
 import subprocess
@@ -11,6 +12,7 @@ from abc import ABC, abstractmethod
 import rclpy
 from rclpy.node import Node
 from std_srvs.srv import Empty
+from gazebo_msgs.srv import SetEntityState
 from ament_index_python.packages import get_package_share_directory
 
 from rosgym.sensors import Sensors
@@ -58,6 +60,7 @@ class ROSGymEnv(Node, gym.Env, ABC):
 
         # ROS 2 setup
         self.reset_world_client = self.create_client(Empty, "reset_world")
+        self.set_entity_state_client = self.create_client(SetEntityState, "/set_entity_state")
         self.sensors = Sensors(self)
 
         # Training variables
@@ -73,18 +76,23 @@ class ROSGymEnv(Node, gym.Env, ABC):
     def step(self, action):
         self._send_action(action)
         self._spin_sensors_callbacks()
+        self.episode_step += 1
 
         sensor_data = self._get_sensor_data()
 
         next_obs = self._get_observation(sensor_data)
         terminated, event = self._check_events(sensor_data)
+
+        # Hitting the time limit is a truncation, not a terminal state: the
+        # robot could have kept going, so the agent must still bootstrap.
+        truncated = not terminated and self.episode_step >= self.timeout_steps
+        if truncated:
+            event = "timeout"
         sensor_data["event"] = event
 
         reward = self._get_reward(sensor_data)
-        truncated = self.episode_step >= self.timeout_steps
-        self.episode_step += 1
 
-        return next_obs, reward, terminated, truncated, {}
+        return next_obs, reward, terminated, truncated, {"event": event}
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -180,6 +188,30 @@ class ROSGymEnv(Node, gym.Env, ABC):
             self.get_logger().error(f"Emergency reset failed: {e}")
             return False
     
+    def _set_entity_state(self, name, x, y, z=0.05, yaw=0.0):
+        """
+        Teleport a Gazebo entity to (x, y, z) with heading yaw and zero velocity.
+
+        Returns:
+            bool: True if Gazebo confirmed the new state
+        """
+        request = SetEntityState.Request()
+        request.state.name = name
+        request.state.reference_frame = "world"
+        request.state.pose.position.x = float(x)
+        request.state.pose.position.y = float(y)
+        request.state.pose.position.z = float(z)
+        request.state.pose.orientation.z = math.sin(yaw / 2.0)
+        request.state.pose.orientation.w = math.cos(yaw / 2.0)
+
+        future = self.set_entity_state_client.call_async(request)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=1.0)
+
+        if future.result() is None:
+            self.get_logger().error(f"set_entity_state call timed out for '{name}'")
+            return False
+        return future.result().success
+
     def _launch_gazebo(self, world_path, headless=True):
         cmd = ["gazebo", world_path]
         if headless:
