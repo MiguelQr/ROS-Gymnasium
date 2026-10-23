@@ -33,7 +33,6 @@ class ROSGymEnv(Node, gym.Env, ABC):
                 ("package_name", rclpy.Parameter.Type.STRING),
                 ("training_params_path", rclpy.Parameter.Type.STRING),
                 ("main_params_path", rclpy.Parameter.Type.STRING),
-                ("mode", rclpy.Parameter.Type.STRING),
                 ("world_name", rclpy.Parameter.Type.STRING),
                 ("robot_name", rclpy.Parameter.Type.STRING),
                 ("sensor", rclpy.Parameter.Type.STRING),
@@ -52,7 +51,6 @@ class ROSGymEnv(Node, gym.Env, ABC):
 
         
         self.package_name = self._param("package_name", "string_value")
-        self.mode = self._param("mode", "string_value")
         self.world_name = self._param("world_name", "string_value")
         self.robot_name = self._param("robot_name", "string_value")
         self.sensor_type = self._param("sensor", "string_value")

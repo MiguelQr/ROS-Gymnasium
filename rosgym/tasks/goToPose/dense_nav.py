@@ -40,9 +40,7 @@ class DenseNavEnv(ROSGymEnv):
             ],
         )
 
-        goals_path = os.path.join(get_package_share_directory(self.package_name), "goals_and_poses")
-        goals_path = os.path.join(goals_path, self.mode)
-        self.data_path = os.path.join(goals_path, self.get_parameter("data_path").get_parameter_value().string_value)
+        self.data_path = self._param("data_path", "string_value")
 
         self.goal_tolerance = self._param("goal_tolerance", "double_value")
         
@@ -230,15 +228,10 @@ class DenseNavEnv(ROSGymEnv):
             index = self.np_random.integers(len(self.poses))
             x, y, yaw = self.poses[index]
 
-        qz = np.sin(yaw / 2)
-        qw = np.cos(yaw / 2)
-        state = (
-            f"{{\"state\": {{\"name\": \"{self.robot_name}\", "
-            f"\"pose\": {{\"position\": {{\"x\": {x}, \"y\": {y}, \"z\": 0.02}}, "
-            f"\"orientation\": {{\"z\": {qz}, \"w\": {qw}}}}}}}}}"
-        )
-        os.system(f"ros2 service call /test/set_entity_state gazebo_msgs/srv/SetEntityState {state}  2>/dev/null")
-        #time.sleep(0.25)
+        if not self._set_entity_state(self.robot_name, x, y, z=0.02, yaw=yaw):
+            self.get_logger().warn("Robot teleportation failed")
+            return False
+        return True
 
     def _send_action(self, action):
 
@@ -252,7 +245,6 @@ class DenseNavEnv(ROSGymEnv):
         data_path = os.path.join(
             get_package_share_directory(self.package_name),
             "goals_and_poses",
-            #self.mode,
             self.data_path,
         )
         with open(data_path, "r") as file:

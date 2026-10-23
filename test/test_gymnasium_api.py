@@ -78,8 +78,6 @@ def env(request, ros_context, monkeypatch, tmp_path, teleports):
     monkeypatch.setattr(ROSGymEnv, "_set_entity_state", set_entity_state)
     monkeypatch.setattr(ROSGymEnv, "_create_logdir", lambda self: str(tmp_path))
     monkeypatch.setattr(env_cls, "_reset_simulation", lambda self: None)
-    if env_cls is DenseNavEnv:
-        monkeypatch.setattr(env_cls, "_respawn_robot", lambda self: None)
     monkeypatch.setattr(Sensors, "get_depth", camera_depth)
     monkeypatch.setattr(Sensors, "get_laser", laser)
     monkeypatch.setattr(Sensors, "get_odom", lambda self, vel=False: [0.0, 0.0, 0.0])

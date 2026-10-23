@@ -23,6 +23,7 @@ ROS-Gym provides an interface for connecting the Gymnasium (formerly OpenAI Gym)
 - ROS 2 Foxy (Ubuntu 20.04) or ROS 2 Humble (Ubuntu 22.04), tested on both
 - Gazebo 11
 - Python 3.8+
+- A robot description package named after `robot_name` in `config/main_params.yaml` (default `tb2_ugv`) that provides `launch/description.launch.py` and publishes `/robot_description`, with a depth camera on `/camera/depth/image_raw`, a laser on `/scan` and odometry on `/odom`
 
 ### Setup
 
@@ -43,39 +44,49 @@ ROS-Gym provides an interface for connecting the Gymnasium (formerly OpenAI Gym)
    rosdep install --from-paths src --ignore-src -r -y
    ```
 
-4. **Build the workspace**:
+4. **Install the Python packages**:
+   ```bash
+   pip install gymnasium "stable-baselines3[extra]"
+   ```
+
+5. **Build the workspace**:
    ```bash
    colcon build
+   source install/setup.bash
    ```
 
 ## Usage
 
-This launch file provides a unified way to launch Gazebo simulation environments
-with RosgymRL agents.
+`training.launch.py` starts Gazebo with the selected world, spawns the robot and the goal, and runs the training script (`go_to_pose_camera`). The script trains the environment and algorithm set in `config/training_params.yaml` (default: PPO on `SparseNavEnvDiscrete-v0`).
 
-## Launch Arguments
-
-| Argument | Default | Description |
-|----------|---------|-------------|
-| sensor | Camera | Sensor type (Camera/Lidar) |
-| task | GoToPose | Task type (GoToPose) |
-| mode | training | Mode (training/testing) |
-| pkg_name | rosgym | Package name |
-| world_name | empty.world | Gazebo world file name |
-| use_sim_time | true | Use simulation clock |
-
-## Example Usage
-
-Basic usage:
+Train in the default world (`gridworld_4x4.world` from `config/main_params.yaml`):
 ```bash
 ros2 launch rosgym training.launch.py
 ```
 
-Custom configuration:
+Train in a larger world:
 ```bash
-ros2 launch rosgym training.launch.py sensor:=Lidar task:=goToPose mode:=training world_name:=maze.world
+ros2 launch rosgym training.launch.py world_name:=gridworld_8x8.world
 ```
 
+Available worlds: `gridworld_4x4.world`, `gridworld_6x6.world`, `gridworld_8x8.world`, `tesis_avoidance.world`, `tesis_circuit.world`, `tesis_obstacle.world`.
+
+TensorBoard logs are written to `./results/<run_name>` and the trained model is saved as `<run_name>.zip`:
+```bash
+tensorboard --logdir results
+```
+
+### Launch Arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| world_name | `world_name` in `main_params.yaml` | World file from `worlds/` |
+| sensor | `sensor` in `main_params.yaml` | Sensor type; only `camera` is implemented |
+| task | `task` in `main_params.yaml` | Task type; only `goToPose` is implemented |
+| main_params | `config/main_params.yaml` | Robot, sensor and world parameters |
+| training_params | `config/training_params.yaml` | Training algorithm and hyperparameters |
+| pkg_name | rosgym | Package name |
+| use_sim_time | true | Use simulation clock |
 
 ## Creating Environments
 
@@ -131,7 +142,7 @@ ROS-Gymnasium/
 ├── config/
 │   ├── main_params.yaml          # Robot, sensor and world parameters
 │   └── training_params.yaml      # SB3 algorithm and hyperparameters
-├── goals_and_poses/training/     # Goal and spawn poses per world
+├── goals_and_poses/             # Goal and spawn poses per world
 ├── launch/
 │   ├── training.launch.py
 │   └── multi_robot_training.launch.py   # Work in progress

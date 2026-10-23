@@ -53,9 +53,7 @@ class SparseNavEnv(ROSGymEnv):
 
         self.MIN_LINEAR_VELOCITY = 0.01
 
-        goals_path = os.path.join(get_package_share_directory(self.package_name), "goals_and_poses")
-        goals_path = os.path.join(goals_path, self.mode)
-        self.data_path = os.path.join(goals_path, self.get_parameter("data_path").get_parameter_value().string_value)
+        self.data_path = self._param("data_path", "string_value")
 
         self.goal_tolerance = self._param("goal_tolerance", "double_value")
 

@@ -81,7 +81,6 @@ def prepare_launch(context, *args, **kwargs):
     # Get all configuration parameters
     sensor = LaunchConfiguration("sensor").perform(context=context)
     task = LaunchConfiguration("task").perform(context=context)
-    mode = LaunchConfiguration("mode").perform(context=context)
     pkg_name = LaunchConfiguration("pkg_name").perform(context=context)
     main_params_path = LaunchConfiguration("main_params").perform(context=context)
     training_params_path = LaunchConfiguration("training_params").perform(context=context)
@@ -92,35 +91,12 @@ def prepare_launch(context, *args, **kwargs):
     with open(main_params_path, 'r') as file:
         config_params = yaml.safe_load(file)["main_node"]["ros__parameters"]
 
-    # Process configuration
-    if sensor or task or mode:
-        # Create parameter rewrites dictionary
-        param_rewrites = {}
-        if sensor:
-            param_rewrites["sensor"] = sensor
-        if task:
-            param_rewrites["task"] = task
-        if mode:
-            param_rewrites["mode"] = mode
-        if world_name_arg and world_name_arg != "empty.world":
-            param_rewrites["world_name"] = world_name_arg
-            
-        # Load original parameters
-        with open(main_params_path, 'r') as file:
-            config_params = yaml.safe_load(file)["main_node"]["ros__parameters"]
-            
-        # Apply the rewrites manually
-        for key, value in param_rewrites.items():
+    # Launch arguments override main_params.yaml when given
+    for key, value in (("sensor", sensor), ("task", task), ("world_name", world_name_arg)):
+        if value:
             config_params[key] = value
-            
-        # Create a proper parameters dictionary for the node
-        configured_params = config_params
-    else:
-        # If no substitutions, just load the file directly
-        with open(main_params_path, 'r') as file:
-            config_params = yaml.safe_load(file)["main_node"]["ros__parameters"]
-        configured_params = config_params
-    
+    configured_params = config_params
+
     # Get the final world name from config_params (either from file or overridden)
     world_name = config_params["world_name"]
     
@@ -133,7 +109,6 @@ def prepare_launch(context, *args, **kwargs):
     goals_path = os.path.join(
         get_package_share_directory(pkg_name),
         'goals_and_poses',
-        config_params['mode'],
         config_params['data_path']
     )
     with open(goals_path, 'r') as file:
@@ -314,18 +289,13 @@ def generate_launch_description():
     launch_args = [
         DeclareLaunchArgument(
             "sensor", 
-            default_value="Camera", 
-            description="Sensor type: Camera or Lidar"
+            default_value="",
+            description="Sensor type (default: sensor in main_params.yaml); only camera is implemented"
         ),
         DeclareLaunchArgument(
             "task", 
-            default_value="GoToPose", 
-            description="Task type: GoToPose"
-        ),
-        DeclareLaunchArgument(
-            "mode", 
-            default_value="training", 
-            description="Mode: training or testing"
+            default_value="",
+            description="Task type (default: task in main_params.yaml); only goToPose is implemented"
         ),
         DeclareLaunchArgument(
             "pkg_name", 
@@ -352,8 +322,8 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "world_name",
-            default_value="gridworld_4x4.world",
-            description="Gazebo world file name"
+            default_value="",
+            description="World file in worlds/ (default: world_name in main_params.yaml)"
         ),
         DeclareLaunchArgument(
             "use_sim_time",

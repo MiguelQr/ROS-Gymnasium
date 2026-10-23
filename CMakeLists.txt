@@ -40,7 +40,7 @@ install(PROGRAMS
 # scripts/multi_agent_training is work in progress and intentionally not installed
 
 install(
-  DIRECTORY launch config goals_and_poses worlds media models
+  DIRECTORY launch config goals_and_poses worlds models
   DESTINATION share/${PROJECT_NAME}
 )
 
