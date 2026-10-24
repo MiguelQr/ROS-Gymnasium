@@ -11,10 +11,11 @@ import pytest
 import rclpy
 import yaml
 from ament_index_python.packages import get_package_share_directory
+from gymnasium import spaces
 from gymnasium.utils.env_checker import check_env
 
 from ros_gymnasium.ros_gymnasium_env import ROSGymnasiumEnv
-from ros_gymnasium.sensors import Sensors
+from ros_gymnasium.sensors import DepthCamera, Sensors
 from ros_gymnasium.tasks.go_to_pose.dense_nav import DenseNavEnv
 from ros_gymnasium.tasks.go_to_pose.sparse_nav import SparseNavEnv
 
@@ -24,6 +25,7 @@ ENVS = {
     "DenseNavEnv": (DenseNavEnv, {}),
 }
 
+OBSERVATION_SENSORS = ["depth", "scan", "odom"]  # observed sensors in the tests
 CAMERA_DEPTH = 1.5  # [m], fake camera depth
 
 
@@ -40,6 +42,7 @@ def ros_context(tmp_path_factory):
         package_name="ros_gymnasium",
         main_params_path=main_params,
         training_params_path=training_params,
+        observation_sensors=OBSERVATION_SENSORS,
     )
 
     params_file = tmp_path_factory.mktemp("ros") / "params.yaml"
@@ -68,7 +71,7 @@ def env(request, ros_context, monkeypatch, tmp_path, teleports):
 
     def camera_depth(self):
         p = self.depth_process
-        return np.full((p.height, p.width, 1), CAMERA_DEPTH, dtype=np.float32)
+        return np.full((p.height, p.width), CAMERA_DEPTH, dtype=np.float32)
 
     def laser(self, min_obstacle_distance=False):
         p = self.laser_process
@@ -92,6 +95,16 @@ def test_check_env(env):
     """Runs Gymnasium's environment checker."""
     env.render_mode = "rgb_array"
     check_env(env)
+
+
+def test_observation_space(env):
+    """Dict observation with stacked readings of each observed sensor."""
+    sensor_spaces = env.sensors.observation_spaces()
+
+    assert isinstance(env.observation_space, spaces.Dict)
+    assert set(env.observation_space.spaces) == set(OBSERVATION_SENSORS)
+    for name in OBSERVATION_SENSORS:
+        assert env.observation_space[name].shape == (env.stacked_frames, *sensor_spaces[name].shape)
 
 
 def test_timeout(env):
@@ -118,25 +131,42 @@ def test_seeding(env, teleports):
     assert len({str(episode_start(seed)) for seed in range(10)}) > 1
 
 
+def test_goal_box_follows_goal(env, teleports):
+    """Reset moves the goal entity to the new goal pose."""
+    env.reset(seed=0)
+
+    goal_teleports = [(x, y) for name, x, y, _ in teleports if name == "goal"]
+    assert goal_teleports[-1] == (env.goal_pose[0], env.goal_pose[1])
+
+
 def test_reset_clear(env):
     """Reset clears previous frames from the observation stack."""
     env.reset(seed=0)
-    for _ in range(env.stacked_images):
+    for _ in range(env.stacked_frames):
         env.step(env.action_space.sample())
 
     obs, _ = env.reset(seed=0)
 
-    assert np.all(obs[0] > 0.0)
-    assert np.all(obs[1:] == 0.0)
+    assert np.all(obs["depth"][0] > 0.0)
+    assert np.all(obs["depth"][1:] == 0.0)
+
+
+def test_depth_too_close_is_obstacle():
+    """Too close (-inf) maps to 0 m; beyond range (+inf) and no return (NaN) map to the cutoff."""
+    camera = DepthCamera(width=4, height=1, cutoff_dist=3.0)
+    frame = np.array([[-np.inf, np.inf, np.nan, 1.5]], dtype=np.float32)
+
+    np.testing.assert_allclose(camera.process_data(frame), [[0.0, 3.0, 3.0, 1.5]])
 
 
 def test_render(env):
     """rgb_array render returns the latest depth frame as an RGB image."""
     env.render_mode = "rgb_array"
     env.reset(seed=0)
+    camera = env.sensors.depth_process
 
     frame = env.render()
 
     assert frame.dtype == np.uint8
-    assert frame.shape == (env.image_height, env.image_width, 3)
-    assert np.all(frame == int(CAMERA_DEPTH / env.max_depth * 255))
+    assert frame.shape == (camera.height, camera.width, 3)
+    assert np.all(frame == int(CAMERA_DEPTH / camera.cutoff_dist * 255))

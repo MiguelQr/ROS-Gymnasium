@@ -90,7 +90,7 @@ rclpy.init()
 register_envs()
 
 env = gym.make("SparseNavEnvDiscrete-v0")
-model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)
+model = PPO("MultiInputPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)
 model.learn(total_timesteps=1_000_000)
 model.save("ppo_sparse_nav")
 
@@ -114,27 +114,36 @@ The environment reads its ROS parameters and needs Gazebo running, which is why 
 
 ## Creating Environments
 
-Environments can be created by extending the `ROSGymnasiumEnv` base class:
+Environments can be created by extending the `ROSGymnasiumEnv` base class. The base class implements `step()`, `reset()` and `render()`, builds the `Dict` observation from `observation_sensors` and handles frame stacking, seeding and truncation. A subclass defines the action space and implements five methods:
 
 ```python
+from gymnasium import spaces
 from ros_gymnasium.ros_gymnasium_env import ROSGymnasiumEnv
 
 class CustomEnv(ROSGymnasiumEnv):
-    def __init__(self):
+    def __init__(self, render_mode=None):
         super().__init__("my_custom_env")
-        # Your initialization code
-        
+        self.render_mode = render_mode
+        self.action_space = spaces.Discrete(3)
+        self.timeout_steps = 500
+
     def _send_action(self, action):
-        # Implementation for sending actions
-        
-    def _get_sensor_data(self):
-        # Implementation for retrieving sensor data
-        
-    def _get_observation(self, sensor_data):
-        # Implementation for processing observations
-        
-    # Abstract methods...
+        """Publish the action as a ROS command, e.g. a Twist on cmd_vel."""
+
+    def _new_episode(self):
+        """Move the robot and goal to their start poses (see _set_entity_state)."""
+
+    def _check_events(self, sensor_data):
+        """Return (terminated, event), e.g. (True, "goal") or (False, "none")."""
+
+    def _get_reward(self, sensor_data):
+        """Return the reward for sensor_data["event"]."""
+
+    def _log_results(self):
+        """Log statistics when the environment is closed."""
 ```
+
+Override `_get_sensor_data()` to add task data to the sensor readings, as `SparseNavEnv` does with the goal distance and angle.
 
 ## Configuration
 
@@ -155,7 +164,16 @@ Environment parameters can be configured in the YAML files located in the `confi
 | `SparseNavEnv-v0` | `SparseNavEnv(action_type="continuous")` | [linear, angular] velocity | Sparse |
 | `DenseNavEnv-v0` | `DenseNavEnv` | [linear, angular] velocity | Dense (distance and heading) |
 
-All environments observe a stack of depth images and are registered by `ros_gymnasium.register_env.register_envs()`.
+Observations are a `gymnasium.spaces.Dict` built from the sensors listed in `observation_sensors` (`config/main_params.yaml`): each entry holds the last `stacked_frames` readings of one sensor, newest first. Each sensor declares its own space, so enabling a sensor and adding it to `observation_sensors` is enough to observe it. The default is `['depth']`, four stacked depth images of shape `(4, 128, 160)` in metres.
+
+| Sensor | Space per reading |
+|--------|-------------------|
+| `depth` | `Box(0, dist_cutoff, (height, width))`, metres |
+| `scan` | `Box(0, max_distance, (num_points,))`, metres |
+| `odom` | `Box(-inf, inf, (3,))`, `[x, y, yaw]` |
+| `imu` | `Box(-pi, pi, (1,))`, yaw |
+
+All environments are registered by `ros_gymnasium.register_env.register_envs()`.
 
 ## Project Structure
 

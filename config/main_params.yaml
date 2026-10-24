@@ -31,6 +31,8 @@ main_node:
     
     # Sensors parameters
     sensor: 'camera' # Only camera is implemented
+    observation_sensors: ['depth'] # Sensors in the Dict observation: depth, scan, odom, imu (must be enabled below)
+    stacked_frames: 4 # Latest readings of each observation sensor stacked in the observation, newest first
 
     imu_enabled: "false"
     camera_enabled: "true"
@@ -48,5 +50,4 @@ main_node:
       dist_cutoff: 3.0 # Meters
       width: 160
       height: 128
-      stacked_images: 4
       show_image: False

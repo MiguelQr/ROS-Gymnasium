@@ -10,7 +10,7 @@ import rclpy
 from std_srvs.srv import Empty
 from geometry_msgs.msg import Twist
 from ament_index_python.packages import get_package_share_directory
-from ros_gymnasium.utils.env_utils import depth_to_rgb, process_odom
+from ros_gymnasium.utils.env_utils import process_odom
 from ros_gymnasium.ros_gymnasium_env import ROSGymnasiumEnv
 
 from gymnasium import spaces
@@ -20,7 +20,7 @@ ACTION_TYPES = ("discrete", "continuous")
 
 class SparseNavEnv(ROSGymnasiumEnv):
     """
-    Go-to-goal navigation from stacked depth images with a sparse reward.
+    Go-to-goal navigation with a sparse reward. The observation is built from observation_sensors.
 
     Args:
         action_type: "discrete" (10 fixed velocity commands) or "continuous" ([linear, angular] velocity)
@@ -48,12 +48,6 @@ class SparseNavEnv(ROSGymnasiumEnv):
                 ("sparse_reward.goal", rclpy.Parameter.Type.DOUBLE),
                 ("sparse_reward.collision", rclpy.Parameter.Type.DOUBLE),
                 ("sparse_reward.timeout", rclpy.Parameter.Type.DOUBLE),
-                ("depth_param.width", rclpy.Parameter.Type.INTEGER),
-                ("depth_param.height", rclpy.Parameter.Type.INTEGER),
-                ("depth_param.dist_cutoff", rclpy.Parameter.Type.DOUBLE),
-                ("depth_param.stacked_images", rclpy.Parameter.Type.INTEGER),
-                ("laser_param.max_distance", rclpy.Parameter.Type.DOUBLE),
-                ("laser_param.num_points", rclpy.Parameter.Type.INTEGER),
             ],
         )
 
@@ -69,14 +63,6 @@ class SparseNavEnv(ROSGymnasiumEnv):
             event: self._param(f"sparse_reward.{event}", "double_value")
             for event in ("goal", "collision", "timeout")
         }
-
-        self.image_width = self._param("depth_param.width", "integer_value")
-        self.image_height = self._param("depth_param.height", "integer_value")
-        self.stacked_images = self._param("depth_param.stacked_images", "integer_value")
-        self.max_depth = self._param("depth_param.dist_cutoff", "double_value")
-
-        self.lidar_distance = self._param("laser_param.max_distance", "double_value")
-        self.lidar_points = self._param("laser_param.num_points", "integer_value")
 
         # Gymnasium spaces
         if self.action_type == "discrete":
@@ -103,18 +89,7 @@ class SparseNavEnv(ROSGymnasiumEnv):
                 dtype=np.float32
             )
 
-        self.observation_space = spaces.Box(
-            low=0.0, high=self.max_depth,
-            shape=(self.stacked_images, self.image_height, self.image_width),
-            dtype=np.float32
-        )
         self.cmd_vel_pub = self.create_publisher(Twist, "cmd_vel", 10)
-
-        # Initialize image buffer
-        self.image_buffer = np.zeros(
-            (self.stacked_images, self.image_height, self.image_width),
-            dtype=np.float32
-        )
 
         # Initialize environment
         _, goals, _ = self._load_goals_and_poses()
@@ -135,9 +110,6 @@ class SparseNavEnv(ROSGymnasiumEnv):
         stop_twist.linear.x = 0.0
         stop_twist.angular.z = 0.0
         self.cmd_vel_pub.publish(stop_twist)
-
-        # Do not leak frames from the previous episode into the new one
-        self.image_buffer = np.zeros_like(self.image_buffer)
 
         self._respawn_robot()
         self._respawn_goal()
@@ -164,53 +136,15 @@ class SparseNavEnv(ROSGymnasiumEnv):
 
         return False, "none"
 
-    def _get_observation(self, sensor_data):
-        """Get the current observation."""
-        depth_image = sensor_data["depth_image"]
-
-        if len(depth_image.shape) == 3 and depth_image.shape[2] == 1:
-            depth_image = depth_image.squeeze(2)
-
-        self.image_buffer = np.roll(self.image_buffer, shift=1, axis=0)
-        self.image_buffer[0] = depth_image
-
-        return self.image_buffer
-
-    def _render_frame(self):
-        """Latest depth frame as an RGB image."""
-        return depth_to_rgb(self.image_buffer[0], self.max_depth)
-
     def _get_reward(self, sensor_data):
         """Sparse reward: sparse_reward.<event> on goal, collision or timeout, 0 otherwise."""
         return self.rewards.get(sensor_data["event"], 0.0)
 
     def _get_sensor_data(self):
-        """Retrieve sensor data from the robot."""
-        sensor_data = {
-            "scan": self.sensors.get_laser(),
-            "odom": self.sensors.get_odom(),
-            "depth": self.sensors.get_depth(),
-        }
-
-        if sensor_data["scan"] is not None:
-            lidar_measurements, collision = sensor_data["scan"]
-        else:
-            lidar_measurements = np.ones(self.lidar_points) * self.lidar_distance
-            collision = False
-
-        depth_image = sensor_data["depth"] if sensor_data["depth"] is not None else np.ones((self.image_height, self.image_width, 1)) * self.max_depth
-        odom = sensor_data["odom"] if sensor_data["odom"] is not None else [0.0, 0.0, 0.0]
-
-        goal_info, _ = process_odom(self.goal_pose, odom)
-
-        sensor_data_dic = {
-            "scan": lidar_measurements,
-            "depth_image": depth_image,
-            "goal_info": goal_info,
-            "collision": collision,
-        }
-
-        return sensor_data_dic
+        """Sensor readings plus the goal distance and angle relative to the robot."""
+        sensor_data = super()._get_sensor_data()
+        sensor_data["goal_info"], _ = process_odom(self.goal_pose, sensor_data["odom"])
+        return sensor_data
 
     def _log_results(self):
         self.get_logger().debug(f"Goals reached: {self.goal_count}")

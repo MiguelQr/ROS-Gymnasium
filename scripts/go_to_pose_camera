@@ -43,7 +43,7 @@ def main(args=None):
         verbose=1,
         seed=params["seed"],
         tensorboard_log=os.path.join(params["tensorboard_log"], run_name),
-        policy_kwargs={"normalize_images": False},
+        policy_kwargs=params["policy_kwargs"],
         **params["algorithm_params"],
     )
 

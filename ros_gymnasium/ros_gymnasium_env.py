@@ -15,8 +15,10 @@ from gazebo_msgs.srv import SetEntityState
 from ament_index_python.packages import get_package_share_directory
 
 from ros_gymnasium.sensors import Sensors
-from ros_gymnasium.utils.env_utils import create_logdir
+from ros_gymnasium.utils.env_utils import create_logdir, depth_to_rgb
 import gymnasium as gym
+import numpy as np
+from gymnasium import spaces
 
 class ROSGymnasiumEnv(Node, gym.Env, ABC):
     metadata = {"render_modes": ["rgb_array"], "render_fps": 15}
@@ -32,6 +34,8 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
                 ("main_params_path", rclpy.Parameter.Type.STRING),
                 ("robot_name", rclpy.Parameter.Type.STRING),
                 ("sensor", rclpy.Parameter.Type.STRING),
+                ("observation_sensors", rclpy.Parameter.Type.STRING_ARRAY),
+                ("stacked_frames", rclpy.Parameter.Type.INTEGER),
             ],
         )
 
@@ -54,6 +58,15 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
         self.reset_world_client = self.create_client(Empty, "reset_world")
         self.set_entity_state_client = self.create_client(SetEntityState, "/set_entity_state")
         self.sensors = Sensors(self)
+
+        # Observation: the last stacked_frames readings of each sensor in observation_sensors
+        self.observation_sensors = list(self._param("observation_sensors", "string_array_value"))
+        self.stacked_frames = self._param("stacked_frames", "integer_value")
+        self.observation_space = self._build_observation_space()
+        self._frames = {
+            name: np.zeros(space.shape, dtype=space.dtype)
+            for name, space in self.observation_space.spaces.items()
+        }
 
         # Training variables
         self.episode_step = 0
@@ -100,6 +113,10 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
             f"Total_episodes: {self.episode}, Total_steps: {self.total_steps}, "
             f"previous_episode_steps: {previous_episode_steps}"
         )
+
+        # Do not leak frames from the previous episode into the new one
+        for frames in self._frames.values():
+            frames.fill(0)
 
         self._new_episode()
         self._spin_sensors_callbacks()
@@ -228,9 +245,40 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
 
         self.sensors.sensor_msg = dict.fromkeys(self.sensors.sensor_msg.keys(), None)
         
+    def _build_observation_space(self):
+        """Dict space with the last stacked_frames readings of each sensor in observation_sensors."""
+        sensor_spaces = self.sensors.observation_spaces()
+        missing = [name for name in self.observation_sensors if name not in sensor_spaces]
+        if missing:
+            raise ValueError(
+                f"observation_sensors {missing} are not enabled. Enabled sensors: {sorted(sensor_spaces)}"
+            )
+
+        return spaces.Dict({
+            name: spaces.Box(
+                low=np.repeat(sensor_spaces[name].low[np.newaxis], self.stacked_frames, axis=0),
+                high=np.repeat(sensor_spaces[name].high[np.newaxis], self.stacked_frames, axis=0),
+                dtype=sensor_spaces[name].dtype,
+            )
+            for name in self.observation_sensors
+        })
+
+    def _get_sensor_data(self):
+        """Latest processed reading of each enabled sensor. Tasks extend it with task data such as the goal."""
+        return self.sensors.readings()
+
+    def _get_observation(self, sensor_data):
+        """Push each observation sensor's latest reading onto its frame stack (newest first)."""
+        for name in self._frames:
+            self._frames[name] = np.roll(self._frames[name], shift=1, axis=0)
+            self._frames[name][0] = sensor_data[name]
+        return {name: frames.copy() for name, frames in self._frames.items()}
+
     def _render_frame(self):
-        """Latest camera frame as an (H, W, 3) uint8 array, or None if the task has no camera."""
-        return None
+        """Latest depth frame as an (H, W, 3) uint8 array, or None if depth is not observed."""
+        if "depth" not in self._frames:
+            return None
+        return depth_to_rgb(self._frames["depth"][0], self.sensors.depth_process.cutoff_dist)
 
     @abstractmethod
     def _check_events(self, sensor_data):
@@ -243,19 +291,9 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
         pass
 
     @abstractmethod
-    def _get_observation(self, sensor_data):
-        """Retrieve next observation"""
-        pass
-
-    @abstractmethod
     def _get_reward(self, sensor_data):
         """Calculate the reward based on the event and goal distance."""
         pass
-
-    @abstractmethod
-    def _get_sensor_data(self):
-        """Retrieve sensor data from the robot."""
-        pass  
 
     @abstractmethod
     def _log_results(self):

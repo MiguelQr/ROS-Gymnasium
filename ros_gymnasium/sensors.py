@@ -4,6 +4,7 @@ import math
 import cv2
 import rclpy
 import numpy as np
+from gymnasium import spaces
 
 from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
@@ -36,6 +37,14 @@ class LaserScanSensor:
 
         self.collision_vector = self.get_collision_vector()
         self.collision_threshold = 3
+
+    def observation_space(self):
+        """Downsampled ranges in metres."""
+        return spaces.Box(0.0, self.max_dist, shape=(self.num_points,), dtype=np.float32)
+
+    def default_reading(self):
+        """Reading used until the first scan arrives: nothing in range."""
+        return np.full(self.num_points, self.max_dist, dtype=np.float32)
 
     def get_collision_vector(self):
 
@@ -85,6 +94,13 @@ class ImuSensor:
     def __init__(self):
         pass
 
+    def observation_space(self):
+        """Yaw in radians."""
+        return spaces.Box(-np.pi, np.pi, shape=(1,), dtype=np.float32)
+
+    def default_reading(self):
+        return np.zeros(1, dtype=np.float32)
+
     def process_data(self, data):
         _, _, yaw = euler_from_quaternion(data.orientation)
 
@@ -94,6 +110,13 @@ class ImuSensor:
 class OdomSensor:
     def __init__(self):
         pass
+
+    def observation_space(self):
+        """Pose [x, y, yaw] in the odometry frame."""
+        return spaces.Box(-np.inf, np.inf, shape=(3,), dtype=np.float32)
+
+    def default_reading(self):
+        return np.zeros(3, dtype=np.float32)
 
     def process_data(self, data, vel=False):
         pos_x = data.pose.pose.position.x
@@ -121,6 +144,14 @@ class DepthCamera:
         self.show = show
         self.random_noise = False
 
+    def observation_space(self):
+        """Depth image in metres, resized to (height, width)."""
+        return spaces.Box(0.0, self.cutoff_dist, shape=(self.height, self.width), dtype=np.float32)
+
+    def default_reading(self):
+        """Reading used until the first image arrives: nothing closer than cutoff_dist."""
+        return np.full((self.height, self.width), self.cutoff_dist, dtype=np.float32)
+
     def process_data(self, frame):
         np.seterr(all="raise")
         # IF SIMULATION
@@ -128,9 +159,12 @@ class DepthCamera:
         # IF REAL CAMERA
         # max_depth = self.cutoff*1000 [mm]
 
-        depth_frame = np.nan_to_num(frame, nan=0.0, posinf=max_depth, neginf=0.0)
-        depth_frame[depth_frame == 0.0] = max_depth
-        depth_frame = np.minimum(depth_frame, max_depth)
+        # REP 118: -inf is closer than the camera's minimum range (an obstacle right in front),
+        # +inf is beyond its maximum range and NaN is no valid return
+        depth_frame = np.array(frame, dtype=np.float32)
+        depth_frame[np.isneginf(depth_frame)] = 0.0
+        depth_frame[np.isposinf(depth_frame) | np.isnan(depth_frame)] = max_depth
+        depth_frame = np.clip(depth_frame, 0.0, max_depth)
 
         if self.random_noise:
             noise1 = np.random.normal(loc=0.0, scale=0.2, size=depth_frame.shape)
@@ -151,12 +185,6 @@ class DepthCamera:
                 255.0 if np.amax(depth_frame) <= 1.0 else depth_frame
             )
             self.show_image(depth_frame)
-
-        # add a channel to have dims = 3
-        depth_frame = np.expand_dims(depth_frame, axis=-1)
-
-        # if 3 channels are needed by the backbone copy over 3
-        # depth_frame = np.tile(depth_frame, (1, 1, 3))
 
         return depth_frame
 
@@ -272,6 +300,36 @@ class Sensors:
         )
         self.odom_process = OdomSensor()
         self.sensor_msg["odom"] = "None"
+
+    def observation_spaces(self):
+        """Gymnasium space of each enabled sensor's processed reading, keyed by sensor name."""
+        return {name: processor.observation_space() for name, processor in self._processors().items()}
+
+    def readings(self):
+        """Latest processed reading of each enabled sensor (its default until data arrives) and the laser collision flag."""
+        readings = {"collision": False}
+        if self.laser_process is not None:
+            readings["scan"], readings["collision"] = self.get_laser()
+        if self.depth_process is not None:
+            readings["depth"] = self.get_depth()
+        if self.imu_process is not None:
+            readings["imu"] = self.get_imu()
+        readings["odom"] = self.get_odom()
+
+        for name, processor in self._processors().items():
+            if readings[name] is None:
+                readings[name] = processor.default_reading()
+        return readings
+
+    def _processors(self):
+        """Processor of each enabled sensor, keyed by sensor name."""
+        processors = {
+            "imu": self.imu_process,
+            "depth": self.depth_process,
+            "scan": self.laser_process,
+            "odom": self.odom_process,
+        }
+        return {name: processor for name, processor in processors.items() if processor is not None}
 
     def imu_cb(self, msg):
         self.imu_data = msg
