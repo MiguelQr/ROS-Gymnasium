@@ -1,4 +1,4 @@
-# WORK IN PROGRESS: per-robot (namespaced) sensors for multi-robot training.
+"""Namespaced sensors for multi-robot training (work in progress)."""
 
 import os
 import time
@@ -55,12 +55,10 @@ class MultiRobotSensors:
     def get_param(self, node):
         configFilepath = node.main_params_path
 
-        # Load the topic parameters
         with open(configFilepath, "r") as file:
             configParams = yaml.safe_load(file)["main_node"]["ros__parameters"]
 
         return configParams
-
 
     def activate_sensors(self):
         ns_prefix = f"/{self.namespace}"

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import numpy as np
+from gymnasium import spaces
 import math
 import os
 import datetime
@@ -9,6 +10,7 @@ from pathlib import Path
 
 def process_odom(goal_pose, odom):
 
+    """Distance and angle from the robot pose [x, y, yaw] to goal_pose, and the robot pose."""
     goal_distance = math.sqrt(
         (goal_pose[0]-odom[0])**2
         + (goal_pose[1]-odom[1])**2)
@@ -30,9 +32,18 @@ def process_odom(goal_pose, odom):
 
     return goal_info, robot_pose
 
+def goal_observation_space():
+    """
+    Space of process_odom's goal_info: [distance, angle] from the robot to the goal.
+    """
+    return spaces.Box(
+        low=np.array([0.0, -math.pi], dtype=np.float32),
+        high=np.array([np.inf, math.pi], dtype=np.float32),
+        dtype=np.float32,
+    )
+
 def create_logdir(policy, sensor, logdir):
-    """
-    """
+    """Create a timestamped log directory under logdir and log to screen_logger.log in it."""
     logdir_ = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S.%f')}_{sensor}_{policy}/"
     Path(os.path.join(logdir, logdir_)).mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
@@ -48,10 +59,7 @@ def depth_to_rgb(depth, max_depth):
     return np.repeat(gray[:, :, np.newaxis], 3, axis=2)
 
 def euler_from_quaternion(quat):
-    """
-    Converts quaternion (w in last place) to euler roll, pitch, yaw
-    quat = [x, y, z, w]
-    """
+    """Roll, pitch and yaw from a quaternion message."""
     x = quat.x
     y = quat.y
     z = quat.z
@@ -74,12 +82,10 @@ def normalize(v):
     norm=np.linalg.norm(v)
     if norm==0:
         return v, norm
-        #norm=np.finfo(v.dtype).eps
     return v/norm, norm
 
 def quat_to_euler(qz, qw):
-    """
-    """
+    """Yaw from the z and w components of a quaternion."""
     t1 = 2*(qw*qz)
     t2 = 1 - 2*(qz*qz)
 
@@ -88,13 +94,7 @@ def quat_to_euler(qz, qw):
     return Wz
 
 def tf_decompose(robot_pose, goal_pose):
-    """
-    This method decomposes two consecutive reference frames.
-
-    For example, it can return the pose of the goal, converted from 
-    robot reference frame to fixed reference frame, with robot_pose given in 
-    fixed reference frame and goal_pose given in robot reference frame.
-    """ 
+    """Transform goal_pose from the robot frame to the fixed frame, with robot_pose [x, y, yaw] in the fixed frame."""
     xr, yr, zr = tuple(robot_pose)
 
     A = np.zeros([4,4], dtype=float)

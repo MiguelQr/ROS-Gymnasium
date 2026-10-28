@@ -21,6 +21,7 @@ import numpy as np
 from gymnasium import spaces
 
 class ROSGymnasiumEnv(Node, gym.Env, ABC):
+    """Base class for Gymnasium environments simulated in Gazebo through ROS 2."""
     metadata = {"render_modes": ["rgb_array"], "render_fps": 15}
 
     def __init__(self, node_name: str = "rl_base_env"):
@@ -39,7 +40,6 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
             ],
         )
 
-        # ROS parameters
         train_params_path = self._param("training_params_path", "string_value")
         self.main_params_path = self._param("main_params_path", "string_value")
         
@@ -49,17 +49,14 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
         with open(train_params_path, "r") as train_param_file:
             self.train_params = yaml.safe_load(train_param_file)["training_params"]
 
-        
         self.package_name = self._param("package_name", "string_value")
         self.robot_name = self._param("robot_name", "string_value")
         self.sensor_type = self._param("sensor", "string_value")
 
-        # ROS 2 setup
         self.reset_world_client = self.create_client(Empty, "reset_world")
         self.set_entity_state_client = self.create_client(SetEntityState, "/set_entity_state")
         self.sensors = Sensors(self)
 
-        # Observation: the last stacked_frames readings of each sensor in observation_sensors
         self.observation_sensors = list(self._param("observation_sensors", "string_array_value"))
         self.stacked_frames = self._param("stacked_frames", "integer_value")
         self.observation_space = self._build_observation_space()
@@ -67,8 +64,8 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
             name: np.zeros(space.shape, dtype=space.dtype)
             for name, space in self.observation_space.spaces.items()
         }
+        self._task_observations = []
 
-        # Training variables
         self.episode_step = 0
         self.episode = 0
         self.total_steps = 0 
@@ -87,8 +84,6 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
         next_obs = self._get_observation(sensor_data)
         terminated, event = self._check_events(sensor_data)
 
-        # Hitting the time limit is a truncation, not a terminal state: the
-        # robot could have kept going, so the agent must still bootstrap.
         truncated = not terminated and self.episode_step >= self.timeout_steps
         if truncated:
             event = "timeout"
@@ -114,7 +109,6 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
             f"previous_episode_steps: {previous_episode_steps}"
         )
 
-        # Do not leak frames from the previous episode into the new one
         for frames in self._frames.values():
             frames.fill(0)
 
@@ -133,7 +127,7 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
         return None
 
     def close(self):
-        """Release the environment's ROS node. Shutting down rclpy is left to the caller."""
+        """Destroy the environment's ROS node."""
         self.get_logger().info("Closing environment...")
         self._log_results()
         self.destroy_node()
@@ -147,13 +141,7 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
         return create_logdir(self.train_params["algorithm"], self.sensor_type, log_path)
     
     def _emergency_reset(self):
-        """
-        Emergency reset when sensors stop responding.
-        Attempts to reset the simulation to recover from potential physics issues.
-        
-        Returns:
-            bool: True if reset was successful
-        """
+        """Reset the Gazebo world when sensors stop responding. Return True if sensor data resumes."""
         try:
             self.get_logger().warn("Attempting emergency robot reset...")
             
@@ -191,12 +179,7 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
             return False
     
     def _set_entity_state(self, name, x, y, z=0.05, yaw=0.0):
-        """
-        Teleport a Gazebo entity to (x, y, z) with heading yaw and zero velocity.
-
-        Returns:
-            bool: True if Gazebo confirmed the new state
-        """
+        """Teleport a Gazebo entity to (x, y, z) with heading yaw. Return True on success."""
         request = SetEntityState.Request()
         request.state.name = name
         request.state.reference_frame = "world"
@@ -218,24 +201,20 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
         return self.get_parameter(name).get_parameter_value().__getattribute__(dtype)
 
     def _spin_sensors_callbacks(self, max_attempts=100):
-        #self.get_logger().debug("Spinning node until sensors ready...")
         rclpy.spin_once(self)
         retries = 0
         while None in self.sensors.sensor_msg.values():
             rclpy.spin_once(self, timeout_sec=0.1)
             retries += 1
         
-            # Log which sensors we're waiting for if we've waited a while
             if retries == 50:
                 missing = [k for k, v in self.sensors.sensor_msg.items() if v is None]
                 self.get_logger().warn(f"Waiting for sensors: {missing}")
         
-            # Try recovery if we timeout
             if retries > max_attempts:
                 missing = [k for k, v in self.sensors.sensor_msg.items() if v is None]
                 self.get_logger().error(f"Sensor timeout: missing {missing} after {max_attempts} attempts.")
                 
-                # Attempt emergency recovery
                 if self._emergency_reset():
                     self.get_logger().info("Emergency recovery successful")
                     break
@@ -263,44 +242,55 @@ class ROSGymnasiumEnv(Node, gym.Env, ABC):
             for name in self.observation_sensors
         })
 
+    def _add_task_observation(self, name, space):
+        """Add an unstacked task entry to the Dict observation, read from sensor_data[name]."""
+        if name in self.observation_space.spaces:
+            raise ValueError(f"Observation entry '{name}' already exists")
+        self.observation_space = spaces.Dict({**self.observation_space.spaces, name: space})
+        self._task_observations.append(name)
+
     def _get_sensor_data(self):
-        """Latest processed reading of each enabled sensor. Tasks extend it with task data such as the goal."""
+        """Latest processed reading of each enabled sensor."""
         return self.sensors.readings()
 
     def _get_observation(self, sensor_data):
-        """Push each observation sensor's latest reading onto its frame stack (newest first)."""
+        """Stack the latest sensor readings (newest first) and add the task entries."""
         for name in self._frames:
             self._frames[name] = np.roll(self._frames[name], shift=1, axis=0)
             self._frames[name][0] = sensor_data[name]
-        return {name: frames.copy() for name, frames in self._frames.items()}
+
+        observation = {name: frames.copy() for name, frames in self._frames.items()}
+        for name in self._task_observations:
+            observation[name] = np.asarray(sensor_data[name], dtype=self.observation_space[name].dtype)
+        return observation
 
     def _render_frame(self):
-        """Latest depth frame as an (H, W, 3) uint8 array, or None if depth is not observed."""
+        """Latest depth frame as an RGB image, or None if depth is not observed."""
         if "depth" not in self._frames:
             return None
         return depth_to_rgb(self._frames["depth"][0], self.sensors.depth_process.cutoff_dist)
 
     @abstractmethod
     def _check_events(self, sensor_data):
-        """Check for termination events (collision, goal, timeout)."""
+        """Return (terminated, event) for the current step."""
         pass
 
     @abstractmethod
     def _new_episode(self):
-        """ """
+        """Prepare the simulation for a new episode."""
         pass
 
     @abstractmethod
     def _get_reward(self, sensor_data):
-        """Calculate the reward based on the event and goal distance."""
+        """Reward for the current step."""
         pass
 
     @abstractmethod
     def _log_results(self):
-        """Log results to file."""
+        """Log episode statistics."""
         pass
     
     @abstractmethod
     def _send_action(self, twist):
-        """Transform RL action to ROS command."""
+        """Publish the action as a ROS command."""
         pass

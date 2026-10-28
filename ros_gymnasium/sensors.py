@@ -29,7 +29,6 @@ class LaserScanSensor:
         self.robot_size = robot_size
         self.collision_tolerance = collision_tolerance
 
-        # Validate input dimensions
         if self.robot_type == "circular" and self.robot_radius is None:
             raise ValueError("Circular robot type requires a 'robot_radius' parameter.")
         if self.robot_type == "rectangular" and self.robot_size is None:
@@ -52,8 +51,8 @@ class LaserScanSensor:
             return np.full(360, self.robot_radius + self.collision_tolerance)
 
         elif self.robot_type == "rectangular":
-            sL = self.robot_size[0] / 2 + self.collision_tolerance  # Length semi-axis
-            sW = self.robot_size[1] / 2 + self.collision_tolerance  # Width semi-axis
+            sL = self.robot_size[0] / 2 + self.collision_tolerance
+            sW = self.robot_size[1] / 2 + self.collision_tolerance
 
             degrees = np.linspace(0, 2 * math.pi, 360, endpoint=False)
             vec1 = sL / np.maximum(np.cos(degrees), 0.0001)
@@ -72,15 +71,12 @@ class LaserScanSensor:
         collision_threshold = 17
         collision = collision_points >= collision_threshold
 
-        # Add Gaussian noise and clip to valid range
         points = self.add_noise(points)
         points = np.clip(points, 0.2, self.max_dist)
 
-        # Downsample the laser scan points to reduce processing
         div = int(360 / self.num_points)
         scan_range = np.minimum.reduceat(points, np.arange(0, len(points), div))
 
-        # Get minimum distance and corresponding angle
         min_obstacle_distance = np.min(points)
 
         return scan_range, min_obstacle_distance, collision
@@ -124,7 +120,6 @@ class OdomSensor:
         zqr = data.pose.pose.orientation.z
         wqr = data.pose.pose.orientation.w
         zr = quat_to_euler(zqr, wqr)
-        # _,_,yaw = euler_from_quaternion(data.pose.pose.orientation)
 
         if vel:
             vx = data.twist.twist.linear.x
@@ -153,14 +148,10 @@ class DepthCamera:
         return np.full((self.height, self.width), self.cutoff_dist, dtype=np.float32)
 
     def process_data(self, frame):
+        """Clean, clip and resize a depth image: -inf (too close) becomes 0, +inf and NaN become cutoff_dist (REP 118)."""
         np.seterr(all="raise")
-        # IF SIMULATION
-        max_depth = self.cutoff_dist  # [m]
-        # IF REAL CAMERA
-        # max_depth = self.cutoff*1000 [mm]
+        max_depth = self.cutoff_dist
 
-        # REP 118: -inf is closer than the camera's minimum range (an obstacle right in front),
-        # +inf is beyond its maximum range and NaN is no valid return
         depth_frame = np.array(frame, dtype=np.float32)
         depth_frame[np.isneginf(depth_frame)] = 0.0
         depth_frame[np.isposinf(depth_frame) | np.isnan(depth_frame)] = max_depth
@@ -215,8 +206,8 @@ class RGBCamera:
 
 
 class Sensors:
+    """Subscribes to the enabled sensors and processes their latest messages."""
     def __init__(self, node):
-        # super().__init__("generic_sensors_node")
         self.param = self.get_param(node)
 
         self.odom_data = None
@@ -244,7 +235,6 @@ class Sensors:
     def get_param(self, node):
         configFilepath = node.main_params_path
 
-        # Load the topic parameters
         with open(configFilepath, "r") as file:
             configParams = yaml.safe_load(file)["main_node"]["ros__parameters"]
 
@@ -306,7 +296,7 @@ class Sensors:
         return {name: processor.observation_space() for name, processor in self._processors().items()}
 
     def readings(self):
-        """Latest processed reading of each enabled sensor (its default until data arrives) and the laser collision flag."""
+        """Latest processed reading of each enabled sensor, or its default before data arrives, and the laser collision flag."""
         readings = {"collision": False}
         if self.laser_process is not None:
             readings["scan"], readings["collision"] = self.get_laser()

@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 
-"""
-WORK IN PROGRESS: multi-robot training.
-
-This script depends on ``ros_gymnasium.tasks.go_to_pose.multi_nav_discrete.MultiRobotNavEnv``,
-which is not part of the package yet, so it is not installed and will not run.
-"""
+"""Multi-robot training with Stable-Baselines3 (work in progress)."""
 
 import rclpy
 import torch as th
@@ -21,7 +16,7 @@ register_envs()
 from ros_gymnasium.tasks.go_to_pose.multi_nav_discrete import MultiRobotNavEnv
 
 def make_env(robot_idx, node, num_robots):
-    """Simple environment factory function"""
+    """Environment factory for the robot with index robot_idx."""
     def _init():
         env = MultiRobotNavEnv(num_robots=num_robots, node=node)
         env = Monitor(env, f"./logs/robot_{robot_idx}")

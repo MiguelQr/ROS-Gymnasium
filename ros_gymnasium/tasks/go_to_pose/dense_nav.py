@@ -10,15 +10,15 @@ import rclpy
 from std_srvs.srv import Empty
 from geometry_msgs.msg import Twist
 from ament_index_python.packages import get_package_share_directory
-from ros_gymnasium.utils.env_utils import process_odom
+from ros_gymnasium.utils.env_utils import goal_observation_space, process_odom
 from ros_gymnasium.ros_gymnasium_env import ROSGymnasiumEnv
 
 from gymnasium import spaces
 
 
 class DenseNavEnv(ROSGymnasiumEnv):
+    """Go-to-goal navigation with a dense reward for progress and heading towards the goal."""
     def __init__(self, render_mode=None):
-        """ """
         super().__init__("depth_camera_env")
         if render_mode is not None and render_mode not in self.metadata["render_modes"]:
             raise ValueError(f"Unsupported render_mode: {render_mode}")
@@ -31,6 +31,7 @@ class DenseNavEnv(ROSGymnasiumEnv):
             parameters=[
                 ("data_path", rclpy.Parameter.Type.STRING),
                 ("goal_tolerance", rclpy.Parameter.Type.DOUBLE),
+                ("goal_observation", rclpy.Parameter.Type.BOOL),
                 ("robot_spawn_z", rclpy.Parameter.Type.DOUBLE),
                 ("goal_spawn_z", rclpy.Parameter.Type.DOUBLE),
                 ("dense_reward.progress_scale", rclpy.Parameter.Type.DOUBLE),
@@ -51,11 +52,11 @@ class DenseNavEnv(ROSGymnasiumEnv):
             for key in ("progress_scale", "heading_scale", "collision_step", "goal", "collision")
         }
         
-        # Gymnasium spaces
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
+        if self._param("goal_observation", "bool_value"):
+            self._add_task_observation("goal", goal_observation_space())
         self.cmd_vel_pub = self.create_publisher(Twist, "cmd_vel", 10)
 
-        # Initialize environment
         self.initial_pose, self.goals, self.poses = self._load_goals_and_poses()
         self.goal_pose = self.goals[0]
         self.previous_goal_info = None
@@ -74,7 +75,6 @@ class DenseNavEnv(ROSGymnasiumEnv):
         """Reset the environment for a new episode."""
         self.get_logger().info(f"Starting new episode {self.episode}.")
         self.collision_count = 0
-        # Progress reward must not compare against the previous episode's goal
         self.previous_goal_info = None
 
         stop_twist = Twist()
@@ -88,9 +88,9 @@ class DenseNavEnv(ROSGymnasiumEnv):
         time.sleep(0.25)
 
     def _check_events(self, sensor_data):
-        """Check for termination events (collision, goal). Timeouts are handled as truncation by the base class."""
+        """Return (terminated, event) for collisions and reaching the goal."""
         collision = sensor_data["collision"]
-        goal_info = sensor_data["goal_info"]
+        goal_info = sensor_data["goal"]
 
         if collision:
             self.collision_count += 1
@@ -109,7 +109,7 @@ class DenseNavEnv(ROSGymnasiumEnv):
 
     def _get_reward(self, sensor_data):
         """Dense reward: progress towards the goal, heading to the goal, and dense_reward.<event> bonuses."""
-        goal_info = sensor_data["goal_info"]
+        goal_info = sensor_data["goal"]
         event = sensor_data["event"]
         collision = sensor_data["collision"]
 
@@ -132,9 +132,9 @@ class DenseNavEnv(ROSGymnasiumEnv):
         return reward
 
     def _get_sensor_data(self):
-        """Sensor readings plus the goal distance and angle relative to the robot."""
+        """Sensor readings plus "goal": the goal distance and angle relative to the robot."""
         sensor_data = super()._get_sensor_data()
-        sensor_data["goal_info"], _ = process_odom(self.goal_pose, sensor_data["odom"])
+        sensor_data["goal"], _ = process_odom(self.goal_pose, sensor_data["odom"])
         return sensor_data
 
     def _log_results(self):
@@ -145,10 +145,8 @@ class DenseNavEnv(ROSGymnasiumEnv):
         req = Empty.Request()
         while not self.reset_world_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().warn("Service not available, waiting again...")
-        # Use synchronous call instead of async
         future = self.reset_world_client.call_async(req)
         rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
-        #time.sleep(0.5)  # Allow time for reset to complete
 
     def _respawn_goal(self):
         """Respawn the goal in a new position."""

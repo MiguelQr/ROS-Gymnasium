@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
-# WORK IN PROGRESS: multi-robot training. Spawns the robots, but the
-# multi_agent_training executable it starts is not installed yet because
-# MultiRobotNavEnv is not part of the package (see README).
+"""Multi-robot training launch (work in progress)."""
 
 import os
 import yaml
@@ -30,7 +28,6 @@ def generate_non_overlapping_positions(num_positions, grid_size=10, min_distance
     max_attempts = 100
     
     while len(positions) < num_positions and attempts < max_attempts:
-        # Generate a random position
         quadrant = random.randint(1, 4)
         
         if quadrant == 1:
@@ -46,7 +43,6 @@ def generate_non_overlapping_positions(num_positions, grid_size=10, min_distance
             x = random.uniform(2, grid_size)
             y = random.uniform(-grid_size, -2)
             
-        # Check if this position is far enough from all existing positions
         valid = True
         for px, py in positions:
             distance = ((x - px)**2 + (y - py)**2)**0.5
@@ -59,7 +55,6 @@ def generate_non_overlapping_positions(num_positions, grid_size=10, min_distance
         
         attempts += 1
         
-    # If we couldn't find enough non-overlapping positions, just place them in a grid
     if len(positions) < num_positions:
         print("Could not find enough non-overlapping positions, using grid layout")
         
@@ -77,7 +72,6 @@ def generate_non_overlapping_positions(num_positions, grid_size=10, min_distance
     return positions
 
 def prepare_launch(context, *args, **kwargs):
-    # Get all configuration parameters
     sensor = LaunchConfiguration("sensor").perform(context=context)
     task = LaunchConfiguration("task").perform(context=context)
     pkg_name = LaunchConfiguration("pkg_name").perform(context=context)
@@ -90,21 +84,17 @@ def prepare_launch(context, *args, **kwargs):
     with open(main_params_path, 'r') as file:
         config_params = yaml.safe_load(file)["main_node"]["ros__parameters"]
 
-    # Launch arguments override main_params.yaml when given
     for key, value in (("sensor", sensor), ("task", task), ("world_name", world_name_arg)):
         if value:
             config_params[key] = value
     configured_params = config_params
 
-    # Get the final world name from config_params (either from file or overridden)
     world_name = config_params["world_name"]
     
-    # Set up for ros_gymnasium node
     sensor_name = config_params["sensor"]
     task_name = config_params["task"]
-    executable_name = "multi_agent_training"  # Use our multi-agent training script
+    executable_name = "multi_agent_training"
     
-    # Fetch goals and poses
     goals_path = os.path.join(
         get_package_share_directory(pkg_name),
         'goals_and_poses',
@@ -113,11 +103,9 @@ def prepare_launch(context, *args, **kwargs):
     with open(goals_path, 'r') as file:
         goal_and_poses = json.load(file)
     
-    # Generate robot and goal positions
     robot_positions = generate_non_overlapping_positions(num_robots, grid_size=10, min_distance=4.0)
     goal_positions = generate_non_overlapping_positions(num_robots, grid_size=10, min_distance=4.0)
     
-    # Prepare world, robot and goal paths
     world_path = os.path.join(
         get_package_share_directory(pkg_name),
         'worlds', 
@@ -138,10 +126,8 @@ def prepare_launch(context, *args, **kwargs):
         'model.sdf'
     )
     
-    # Launch actions
     actions = []
     
-    # Add Gazebo first (like in training.launch.py)
     gazebo = launch.actions.ExecuteProcess(
         cmd=[
             'gazebo', '--verbose', world_path,
@@ -152,22 +138,18 @@ def prepare_launch(context, *args, **kwargs):
     )
     actions.append(gazebo)
     
-    # Wait for Gazebo to initialize before adding robots
     actions.append(TimerAction(period=5.0, actions=[]))
     
-    # Add robot descriptions and spawn robots
     for i in range(num_robots):
         namespace = f"robot{i}"
         x, y = robot_positions[i]
         yaw = random.uniform(0, 6.28)
         
-        # Create an explicit robot state publisher for each robot with its description
         urdf_path = os.path.join(robot_pkg, 'urdf', 'tb2.urdf.xacro')
 
         from xacro import process_file, process_doc
         import xml.etree.ElementTree as ET
 
-        # Process the xacro file with the name_suffix parameter set to the robot's namespace ID
         xacro_args = {
             'name_suffix': namespace
         }
@@ -178,7 +160,6 @@ def prepare_launch(context, *args, **kwargs):
         else:
             print(f"[ERROR] URDF path not found: {urdf_path}")
         
-        # Use robot state publisher directly with the URDF content rather than a launch file
         robot_state_publisher = Node(
             package='robot_state_publisher',
             executable='robot_state_publisher',
@@ -191,7 +172,6 @@ def prepare_launch(context, *args, **kwargs):
         )
         actions.append(robot_state_publisher)
         
-        # Add a joint state publisher for each robot
         joint_state_publisher = Node(
             package='joint_state_publisher',
             executable='joint_state_publisher',
@@ -200,10 +180,8 @@ def prepare_launch(context, *args, **kwargs):
         )
         actions.append(joint_state_publisher)
         
-        # Wait for the robot description to be published
         actions.append(TimerAction(period=4.0, actions=[]))
         
-        # Spawn robot - directly in the namespace without the leading slash in the topic name
         spawn_robot = Node(
             package='gazebo_ros',
             executable='spawn_entity.py',
@@ -220,10 +198,8 @@ def prepare_launch(context, *args, **kwargs):
         )
         actions.append(spawn_robot)
         
-        # Add a delay between each robot spawn
         actions.append(TimerAction(period=2.0, actions=[]))
         
-        # Spawn goal for this robot
         gx, gy = goal_positions[i]
         spawn_goal = Node(
             package='gazebo_ros',
@@ -239,24 +215,20 @@ def prepare_launch(context, *args, **kwargs):
         )
         actions.append(spawn_goal)
     
-    # Try to locate the actual URDF file for debugging
     print(f"Looking for URDF file at {urdf_path}")
     if not os.path.exists(urdf_path):
         print(f"WARNING: URDF file not found at {urdf_path}")
-        # Try alternative locations
         alt_urdf_path = os.path.join(robot_pkg, 'urdf', 'tb2.urdf.xacro')
         if os.path.exists(alt_urdf_path):
             print(f"Found alternative URDF at {alt_urdf_path}")
             urdf_path = alt_urdf_path
         else:
-            # Find any URDF files in the package
             print("Searching for any URDF files in the package...")
             for root, _, files in os.walk(robot_pkg):
                 for file in files:
                     if file.endswith('.urdf') or file.endswith('.xacro'):
                         print(f"Found potential URDF: {os.path.join(root, file)}")
     
-    # Add the training script as a node with increased delay
     training_node = Node(
         package=pkg_name,
         executable=executable_name,
@@ -278,13 +250,11 @@ def prepare_launch(context, *args, **kwargs):
         ]
     )
     
-    # Increase the delay to give enough time for all robots and sensors to initialize
     actions.append(TimerAction(period=60.0, actions=[training_node]))
     
     return actions
 
 def generate_launch_description():
-    # Declare all the launch arguments
     launch_args = [
         DeclareLaunchArgument(
             "sensor", 
@@ -336,10 +306,8 @@ def generate_launch_description():
         )
     ]
 
-    # Create the launch description
     ld = LaunchDescription(launch_args)
     
-    # Add the opaque function
     ld.add_action(OpaqueFunction(function=prepare_launch))
     
     return ld

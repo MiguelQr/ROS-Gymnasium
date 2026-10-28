@@ -10,7 +10,7 @@ import rclpy
 from std_srvs.srv import Empty
 from geometry_msgs.msg import Twist
 from ament_index_python.packages import get_package_share_directory
-from ros_gymnasium.utils.env_utils import process_odom
+from ros_gymnasium.utils.env_utils import goal_observation_space, process_odom
 from ros_gymnasium.ros_gymnasium_env import ROSGymnasiumEnv
 
 from gymnasium import spaces
@@ -19,8 +19,7 @@ ACTION_TYPES = ("discrete", "continuous")
 
 
 class SparseNavEnv(ROSGymnasiumEnv):
-    """
-    Go-to-goal navigation with a sparse reward. The observation is built from observation_sensors.
+    """Go-to-goal navigation with a sparse reward.
 
     Args:
         action_type: "discrete" (10 fixed velocity commands) or "continuous" ([linear, angular] velocity)
@@ -42,6 +41,7 @@ class SparseNavEnv(ROSGymnasiumEnv):
             parameters=[
                 ("data_path", rclpy.Parameter.Type.STRING),
                 ("goal_tolerance", rclpy.Parameter.Type.DOUBLE),
+                ("goal_observation", rclpy.Parameter.Type.BOOL),
                 ("grid_size", rclpy.Parameter.Type.DOUBLE),
                 ("robot_spawn_z", rclpy.Parameter.Type.DOUBLE),
                 ("goal_spawn_z", rclpy.Parameter.Type.DOUBLE),
@@ -64,18 +64,16 @@ class SparseNavEnv(ROSGymnasiumEnv):
             for event in ("goal", "collision", "timeout")
         }
 
-        # Gymnasium spaces
         if self.action_type == "discrete":
-            self.LINEAR_VELOCITIES = [0.2, 0.4]  # two linear velocities
+            self.LINEAR_VELOCITIES = [0.2, 0.4]
             self.ANGULAR_VELOCITIES = [
-                math.pi/6,   # 30 degrees/s right turn
-                math.pi/12,  # 15 degrees/s right turn
-                0.0,         # straight
-                -math.pi/12, # 15 degrees/s left turn
-                -math.pi/6   # 30 degrees/s left turn
+                math.pi/6,
+                math.pi/12,
+                0.0,
+                -math.pi/12,
+                -math.pi/6
             ]
 
-            # All combinations [0.2, π/6], [0.2, π/12], ..., [0.4, -π/6]
             self.actions = [
                 (lin_vel, ang_vel)
                 for lin_vel in self.LINEAR_VELOCITIES
@@ -84,14 +82,15 @@ class SparseNavEnv(ROSGymnasiumEnv):
             self.action_space = spaces.Discrete(len(self.actions))
         else:
             self.action_space = spaces.Box(
-                low=np.array([self.MIN_LINEAR_VELOCITY, -1.0], dtype=np.float32),  # Linear velocity can only be positive
+                low=np.array([self.MIN_LINEAR_VELOCITY, -1.0], dtype=np.float32),
                 high=np.array([1.0, 1.0], dtype=np.float32),
                 dtype=np.float32
             )
 
+        if self._param("goal_observation", "bool_value"):
+            self._add_task_observation("goal", goal_observation_space())
         self.cmd_vel_pub = self.create_publisher(Twist, "cmd_vel", 10)
 
-        # Initialize environment
         _, goals, _ = self._load_goals_and_poses()
         self.goal_pose = goals[0]
         self.goal_count = 0
@@ -116,9 +115,9 @@ class SparseNavEnv(ROSGymnasiumEnv):
         time.sleep(0.25)
 
     def _check_events(self, sensor_data):
-        """Check for termination events (collision, goal). Timeouts are handled as truncation by the base class."""
+        """Return (terminated, event) for collisions and reaching the goal."""
         collision = sensor_data["collision"]
-        goal_info = sensor_data["goal_info"]
+        goal_info = sensor_data["goal"]
 
         if collision:
             self.collision_count += 1
@@ -141,9 +140,9 @@ class SparseNavEnv(ROSGymnasiumEnv):
         return self.rewards.get(sensor_data["event"], 0.0)
 
     def _get_sensor_data(self):
-        """Sensor readings plus the goal distance and angle relative to the robot."""
+        """Sensor readings plus "goal": the goal distance and angle relative to the robot."""
         sensor_data = super()._get_sensor_data()
-        sensor_data["goal_info"], _ = process_odom(self.goal_pose, sensor_data["odom"])
+        sensor_data["goal"], _ = process_odom(self.goal_pose, sensor_data["odom"])
         return sensor_data
 
     def _log_results(self):
@@ -176,7 +175,7 @@ class SparseNavEnv(ROSGymnasiumEnv):
         return True
 
     def _respawn_robot(self):
-        """Respawn the robot in a new position"""
+        """Respawn the robot in a new position."""
         x, y = self._sample_position()
         yaw = self.np_random.uniform(0, 2 * math.pi)
 

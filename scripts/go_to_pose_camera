@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""Train a ROS-Gymnasium environment with Stable-Baselines3 as configured in training_params.yaml."""
+
 import os
 
 import rclpy
@@ -33,10 +35,8 @@ def main(args=None):
     algorithm = params["algorithm"]
     run_name = f"{params['env_id']}-{algorithm}-seed{params['seed']}"
 
-    # Create the environment
     env = make_vec_env(params["env_id"], n_envs=1)
 
-    # Create the agent
     model = ALGORITHMS[algorithm](
         params["policy"],
         env,
@@ -49,13 +49,10 @@ def main(args=None):
 
     print(f"Training start: {run_name}")
 
-    # Train the model
     model.learn(total_timesteps=params["total_timesteps"], progress_bar=True)
 
-    # Save the model
     model.save(f"{run_name}.zip")
 
-    # Close the environment
     env.close()
 
     try:

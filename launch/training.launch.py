@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""Launch Gazebo, spawn the robot and the goal, and start training."""
+
 import os
 import yaml
 import json
@@ -15,7 +17,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
-TRAINING_EXECUTABLES = ["go_to_pose_camera"]  # Installed by CMakeLists.txt
+TRAINING_EXECUTABLES = ["go_to_pose_camera"]
 
 def camel_to_snake(s):
     """Convert CamelCase to snake_case."""
@@ -30,7 +32,7 @@ def generate_random_position(grid_size):
     return [x, y, yaw]
 
 def prepare_launch(context, *args, **kwargs):
-    # Get all configuration parameters
+    """Build the launch actions from the launch arguments and main_params.yaml."""
     sensor = LaunchConfiguration("sensor").perform(context=context)
     task = LaunchConfiguration("task").perform(context=context)
     pkg_name = LaunchConfiguration("pkg_name").perform(context=context)
@@ -42,17 +44,13 @@ def prepare_launch(context, *args, **kwargs):
     with open(main_params_path, 'r') as file:
         config_params = yaml.safe_load(file)["main_node"]["ros__parameters"]
 
-    # Launch arguments override main_params.yaml when given
     for key, value in (("sensor", sensor), ("task", task), ("world_name", world_name_arg)):
         if value:
             config_params[key] = value
     configured_params = config_params
 
-    # Get the final world name from config_params (either from file or overridden)
     world_name = config_params["world_name"]
-    
 
-    # Set up for ros_gymnasium node
     sensor_name = config_params["sensor"]
     task_name = config_params["task"]
     executable_name = camel_to_snake(task_name) + "_" + camel_to_snake(sensor_name)
@@ -62,7 +60,6 @@ def prepare_launch(context, *args, **kwargs):
             f"Available: {TRAINING_EXECUTABLES}"
         )
     
-    # Fetch goals and poses
     goals_path = os.path.join(
         get_package_share_directory(pkg_name),
         'goals_and_poses',
@@ -71,11 +68,9 @@ def prepare_launch(context, *args, **kwargs):
     with open(goals_path, 'r') as file:
         goal_and_poses = json.load(file)
     
-    #robot_pose = goal_and_poses["initial_pose"]
     robot_pose = generate_random_position(config_params["grid_size"])
     goal_pose = goal_and_poses["goals"][0]
     
-    # Prepare world, robot and goal paths
     world_path = os.path.join(
         get_package_share_directory(pkg_name),
         'worlds', 
@@ -100,10 +95,8 @@ def prepare_launch(context, *args, **kwargs):
         'model.sdf'
     )
     
-    # Launch actions
     actions = []
     
-    # Add robot description
     robot_description = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(robot_pkg, 'launch', 'description.launch.py')
@@ -111,7 +104,6 @@ def prepare_launch(context, *args, **kwargs):
     )
     actions.append(robot_description)
     
-    # Add robot spawning
     spawn_robot = Node(
         package='gazebo_ros',
         executable='spawn_entity.py',
@@ -128,7 +120,6 @@ def prepare_launch(context, *args, **kwargs):
     )
     actions.append(spawn_robot)
     
-    # Add goal spawning
     spawn_goal = Node(
         package='gazebo_ros',
         executable='spawn_entity.py',
@@ -142,7 +133,6 @@ def prepare_launch(context, *args, **kwargs):
         ]
     )
     
-    # Add Gazebo 
     gazebo = launch.actions.ExecuteProcess(
         cmd=[
             'gazebo', '--verbose', world_path,
@@ -154,7 +144,6 @@ def prepare_launch(context, *args, **kwargs):
 
     actions.append(TimerAction(period=5.0, actions=[gazebo]))
     
-    # Add ros_gymnasium node
     ros_gymnasium_node = Node(
         package=pkg_name,
         executable=executable_name,
@@ -169,14 +158,13 @@ def prepare_launch(context, *args, **kwargs):
             {"use_sim_time": use_sim_time}
         ],
     )
-    # Spawn the goal once the robot is in Gazebo, then start training once both are spawned
     actions.append(RegisterEventHandler(OnProcessExit(target_action=spawn_robot, on_exit=[spawn_goal])))
     actions.append(RegisterEventHandler(OnProcessExit(target_action=spawn_goal, on_exit=[ros_gymnasium_node])))
     
     return actions
 
 def generate_launch_description():
-    # Declare all the launch arguments
+    """Declare the launch arguments and build the actions at launch time."""
     launch_args = [
         DeclareLaunchArgument(
             "sensor", 
@@ -223,10 +211,8 @@ def generate_launch_description():
         )
     ]
 
-    # Create the launch description
     ld = LaunchDescription(launch_args)
     
-    # Add the opaque function
     ld.add_action(OpaqueFunction(function=prepare_launch))
     
     return ld

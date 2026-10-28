@@ -1,9 +1,6 @@
-"""
-Gymnasium API conformance tests for the ROS-Gymnasium environments.
+"""Gymnasium API conformance tests for the ROS-Gymnasium environments."""
 
-Run: colcon test --packages-select ros_gymnasium
-"""
-
+import math
 import os
 
 import numpy as np
@@ -18,6 +15,7 @@ from ros_gymnasium.ros_gymnasium_env import ROSGymnasiumEnv
 from ros_gymnasium.sensors import DepthCamera, Sensors
 from ros_gymnasium.tasks.go_to_pose.dense_nav import DenseNavEnv
 from ros_gymnasium.tasks.go_to_pose.sparse_nav import SparseNavEnv
+from ros_gymnasium.wrappers import SelectObservation
 
 ENVS = {
     "SparseNavEnvDiscrete": (SparseNavEnv, {"action_type": "discrete"}),
@@ -25,8 +23,8 @@ ENVS = {
     "DenseNavEnv": (DenseNavEnv, {}),
 }
 
-OBSERVATION_SENSORS = ["depth", "scan", "odom"]  # observed sensors in the tests
-CAMERA_DEPTH = 1.5  # [m], fake camera depth
+OBSERVATION_SENSORS = ["depth", "scan", "odom"]
+CAMERA_DEPTH = 1.5
 
 
 @pytest.fixture(scope="module")
@@ -43,6 +41,7 @@ def ros_context(tmp_path_factory):
         main_params_path=main_params,
         training_params_path=training_params,
         observation_sensors=OBSERVATION_SENSORS,
+        goal_observation=True,
     )
 
     params_file = tmp_path_factory.mktemp("ros") / "params.yaml"
@@ -98,11 +97,12 @@ def test_check_env(env):
 
 
 def test_observation_space(env):
-    """Dict observation with stacked readings of each observed sensor."""
+    """Dict observation with stacked readings of each observed sensor and the goal."""
     sensor_spaces = env.sensors.observation_spaces()
 
     assert isinstance(env.observation_space, spaces.Dict)
-    assert set(env.observation_space.spaces) == set(OBSERVATION_SENSORS)
+    assert set(env.observation_space.spaces) == {*OBSERVATION_SENSORS, "goal"}
+    assert env.observation_space["goal"].shape == (2,)
     for name in OBSERVATION_SENSORS:
         assert env.observation_space[name].shape == (env.stacked_frames, *sensor_spaces[name].shape)
 
@@ -170,3 +170,22 @@ def test_render(env):
     assert frame.dtype == np.uint8
     assert frame.shape == (camera.height, camera.width, 3)
     assert np.all(frame == int(CAMERA_DEPTH / camera.cutoff_dist * 255))
+
+
+def test_goal_observation(env):
+    """Goal entry is [distance, angle] from the robot (at the origin, yaw 0) to the goal."""
+    obs, _ = env.reset(seed=0)
+    goal_x, goal_y = env.goal_pose[0], env.goal_pose[1]
+
+    np.testing.assert_allclose(obs["goal"], [math.hypot(goal_x, goal_y), math.atan2(goal_y, goal_x)], rtol=1e-6)
+
+
+def test_select_observation(env):
+    """SelectObservation turns the Dict observation into one of its Box entries."""
+    wrapped = SelectObservation(env, "depth")
+
+    obs, _ = wrapped.reset(seed=0)
+
+    assert wrapped.observation_space == env.observation_space["depth"]
+    assert isinstance(obs, np.ndarray) and obs in wrapped.observation_space
+    check_env(wrapped)

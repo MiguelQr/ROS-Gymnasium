@@ -173,6 +173,16 @@ Observations are a `gymnasium.spaces.Dict` built from the sensors listed in `obs
 | `odom` | `Box(-inf, inf, (3,))`, `[x, y, yaw]` |
 | `imu` | `Box(-pi, pi, (1,))`, yaw |
 
+Set `goal_observation: true` to add a `goal` entry with the `[distance, angle]` from the robot to the goal, `Box([0, -pi], [inf, pi])`. It is the current value, not stacked. It is disabled by default to keep results comparable with depth-only training.
+
+To train on a single entry as a plain `Box`, wrap the environment:
+
+```python
+from ros_gymnasium.wrappers import SelectObservation
+
+env = SelectObservation(gym.make("SparseNavEnvDiscrete-v0"), "depth")  # observation: Box (4, 128, 160)
+```
+
 All environments are registered by `ros_gymnasium.register_env.register_envs()`.
 
 ## Project Structure
@@ -193,6 +203,7 @@ ROS-Gymnasium/
 ├── ros_gymnasium/
 │   ├── ros_gymnasium_env.py            # ROSGymnasiumEnv base class
 │   ├── register_env.py
+│   ├── wrappers.py               # SelectObservation
 │   ├── sensors.py
 │   ├── multi_robot_sensors.py    # Work in progress
 │   ├── tasks/go_to_pose/

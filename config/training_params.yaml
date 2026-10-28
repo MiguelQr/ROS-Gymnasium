@@ -1,18 +1,16 @@
 training_params:
   # Stable-Baselines3 training setup, read by scripts/go_to_pose_camera
-  env_id: "SparseNavEnvDiscrete-v0" # Registered Gymnasium environment (see ros_gymnasium/register_env.py)
+  env_id: "SparseNavEnvDiscrete-v0" # Registered Gymnasium environment ID
   algorithm: "PPO" # PPO or A2C
-  policy: "MultiInputPolicy" # Required for Dict observations
+  policy: "MultiInputPolicy"
   policy_kwargs:
-    normalize_images: false # Depth is in metres, not 0-255 pixels
+    normalize_images: false
     features_extractor_kwargs:
-      cnn_output_dim: 512 # Same CNN feature size as SB3 CnnPolicy
+      cnn_output_dim: 512
   total_timesteps: 1000000
   seed: 1
 
-  # Keyword arguments passed to the SB3 algorithm constructor.
-  # Values below are the SB3 PPO defaults; remove PPO-only keys
-  # (batch_size, n_epochs, clip_range) when switching to A2C.
+  # Keyword arguments for the SB3 algorithm (SB3 PPO defaults)
   algorithm_params:
     learning_rate: 0.0003
     n_steps: 2048
